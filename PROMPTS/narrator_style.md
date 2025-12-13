@@ -1,0 +1,1 @@
+Tone: quick, sensory, grounded. Favor concrete details (weather, sounds, surfaces) over lengthy exposition. Keep sentences tight; move the action forward with each beat. End scenes with tension or a clear decision.

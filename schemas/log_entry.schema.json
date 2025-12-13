@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LogEntry",
+  "type": "object",
+  "required": ["timestamp", "turn", "scene_id", "summary", "diffs", "rolls"],
+  "additionalProperties": false,
+  "properties": {
+    "timestamp": {"type": "string", "format": "date-time"},
+    "turn": {"type": "integer", "minimum": 0},
+    "scene_id": {"type": "string"},
+    "summary": {"type": "string"},
+    "diffs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hp": {"type": "integer"},
+        "inventory": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "flags": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "rolls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["expr", "total", "entropy_index"],
+        "additionalProperties": false,
+        "properties": {
+          "expr": {"type": "string"},
+          "total": {"type": "integer"},
+          "entropy_index": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}
