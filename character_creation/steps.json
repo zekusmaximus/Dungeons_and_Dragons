@@ -1,0 +1,12 @@
+{
+  "steps": [
+    {"id": "intro", "prompt": "Welcome to character creation. Choose race."},
+    {"id": "race", "prompt": "Select race."},
+    {"id": "class", "prompt": "Select class."},
+    {"id": "abilities", "method": "4d6-drop-lowest", "count": 6},
+    {"id": "background", "table": "backgrounds.json"},
+    {"id": "name", "prompt": "Choose or roll name."},
+    {"id": "inventory", "table": "inventories.json"},
+    {"id": "finalize", "prompt": "Confirm creation."}
+  ]
+}

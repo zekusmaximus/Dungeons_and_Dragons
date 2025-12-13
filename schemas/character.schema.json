@@ -2,12 +2,31 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Character",
   "type": "object",
-  "required": ["slug", "name", "class", "level", "hp", "ac", "abilities", "skills", "inventory", "features", "notes"],
+  "required": [
+    "slug",
+    "name",
+    "race",
+    "class",
+    "background",
+    "level",
+    "hp",
+    "ac",
+    "abilities",
+    "skills",
+    "inventory",
+    "starting_equipment",
+    "features",
+    "proficiencies",
+    "notes",
+    "creation_source"
+  ],
   "additionalProperties": false,
   "properties": {
     "slug": {"type": "string"},
     "name": {"type": "string"},
+    "race": {"type": "string"},
     "class": {"type": "string"},
+    "background": {"type": "string"},
     "level": {"type": "integer", "minimum": 1},
     "hp": {"type": "integer", "minimum": 0},
     "ac": {"type": "integer", "minimum": 1},
@@ -28,7 +47,30 @@
       "type": "object",
       "additionalProperties": {"type": "integer"}
     },
+    "proficiencies": {
+      "type": "object",
+      "required": ["skills", "tools", "languages"],
+      "additionalProperties": false,
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "tools": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "languages": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
     "inventory": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "starting_equipment": {
       "type": "array",
       "items": {"type": "string"}
     },
@@ -36,6 +78,7 @@
       "type": "array",
       "items": {"type": "string"}
     },
-    "notes": {"type": "string"}
+    "notes": {"type": "string"},
+    "creation_source": {"type": "string", "enum": ["dm", "tool"]}
   }
 }
