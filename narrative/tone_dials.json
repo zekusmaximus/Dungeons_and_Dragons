@@ -1,0 +1,12 @@
+{
+  "tones": [
+    {"name": "gritty", "palette": ["muddy", "scarred", "hard choices"], "guidance": "Emphasize costs and wear."},
+    {"name": "heroic", "palette": ["bright", "bold", "selfless"], "guidance": "Spotlight courageous feats."},
+    {"name": "mythic", "palette": ["grand", "ancient", "augury"], "guidance": "Use omens and legendary stakes."},
+    {"name": "noir", "palette": ["rain-slick", "cynical", "shadowy"], "guidance": "Lean into moral ambiguity."},
+    {"name": "horror", "palette": ["claustrophobic", "uncanny", "fragile"], "guidance": "Stress unknown dread."},
+    {"name": "whimsical", "palette": ["playful", "colorful", "curious"], "guidance": "Invite wonder and oddities."},
+    {"name": "grimdark", "palette": ["ruin", "betrayal", "inevitable"], "guidance": "Highlight bleak outcomes."}
+  ],
+  "usage": "Select a tone per scene; weave palette words into narration and apply to rumor mutation."
+}

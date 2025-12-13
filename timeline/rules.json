@@ -1,0 +1,12 @@
+{
+  "advancement": {
+    "travel": "Advance timeline after full-day travel or major downtime blocks.",
+    "triggered_events": "Some events fire when linked clocks tick or rumors are resolved.",
+    "logging": "Record each advancement with [timeline:advance] and cite event ids in changelog entries."
+  },
+  "integration": {
+    "faction_clocks": "Tie event readiness to faction clock fill levels.",
+    "rumors": "Validate or debunk rumors by revealing events; adjust rumor truth accordingly.",
+    "snapshots": "Create snapshots whenever time jumps by more than one event."
+  }
+}

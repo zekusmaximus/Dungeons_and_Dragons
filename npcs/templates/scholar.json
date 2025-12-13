@@ -1,0 +1,11 @@
+{
+  "archetype": "scholar",
+  "motives": ["uncover lost lore", "validate theories", "earn patronage"],
+  "skills": ["research", "languages", "history"],
+  "stat_block": {"ac": 12, "hp": 9, "attack": "+2 dagger"},
+  "scene_prompts": [
+    "offers translations for a price",
+    "requests escorts to ruins",
+    "argues about rumor veracity"
+  ]
+}

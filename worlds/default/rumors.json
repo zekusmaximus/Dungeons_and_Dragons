@@ -1,0 +1,47 @@
+{
+  "rumors": [
+    {
+      "id": "r-falling-star",
+      "text": "A star fell into the marsh; anything forged from its metal cuts ghost-stuff.",
+      "truth": "partial",
+      "spread_likelihood": "high",
+      "related_factions": ["shadow-cartel", "iron-syndicate"],
+      "related_npcs": ["dockside fence", "stargazing hermit"],
+      "related_locations": ["marshlands", "old observatory"],
+      "notes": "Cartel exaggerates the value to bait rivals; actually a broken beacon." 
+    },
+    {
+      "id": "r-plague-shadows",
+      "text": "Pilgrims carry a shadow-plague that steals voices at night.",
+      "truth": "mostly_false",
+      "spread_likelihood": "medium",
+      "related_factions": ["sunlit-assembly"],
+      "related_npcs": ["lantern-keeper Mira"],
+      "related_locations": ["roadside shrines"],
+      "notes": "Sickness is mundane fever; shadows react to tone dial horror scenes." 
+    },
+    {
+      "id": "r-forest-heart",
+      "text": "The forest heartstone can reset any curse if placed beneath the old stones.",
+      "truth": "true",
+      "spread_likelihood": "low",
+      "related_factions": ["verdant-circle"],
+      "related_npcs": ["grove-warden Tal"],
+      "related_locations": ["blighted grove"]
+    },
+    {
+      "id": "r-ghost-tax",
+      "text": "Toll collectors now demand ghost coin alongside silver at the eastern bridge.",
+      "truth": "false",
+      "spread_likelihood": "low",
+      "related_factions": ["iron-syndicate"],
+      "related_npcs": ["bridge captain Jora"],
+      "related_locations": ["eastern bridge"]
+    }
+  ],
+  "propagation": {
+    "downtime": "During downtime or scene resolution, propagate one rumor to a new NPC or location and adjust truth clarity.",
+    "mutation": "When spread, roll deterministic dice: on low results the wording mutates and truth drifts one step.",
+    "logging": "Document spreads in changelog.md with [rumor:spread] and note whether it grew truer or wilder."
+  }
+}

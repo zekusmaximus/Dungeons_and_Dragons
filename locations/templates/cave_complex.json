@@ -1,0 +1,11 @@
+{
+  "template": "cave_complex",
+  "rooms": [
+    {"id": "mouth", "features": ["dripping moss", "narrow passage"], "connections": ["pool", "chimney"]},
+    {"id": "pool", "features": ["glowing algae", "hidden ledge"], "connections": ["mouth", "den"]},
+    {"id": "den", "features": ["beast nest", "bone pile"], "connections": ["pool"]},
+    {"id": "chimney", "features": ["steep climb", "bat roost"], "connections": ["mouth"]}
+  ],
+  "hazards": ["slippery footing", "toxic spores"],
+  "treasures": ["shard of star-ore", "ancient coins"]
+}

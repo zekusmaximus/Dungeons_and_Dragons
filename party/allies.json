@@ -1,0 +1,21 @@
+{
+  "allies": [
+    {
+      "name": "Mira the Lantern",
+      "role": "support",
+      "personality": "optimistic healer",
+      "loyalty": 3,
+      "abilities": ["channel light", "first aid"],
+      "triggers": ["protect innocents", "witness cruelty"]
+    },
+    {
+      "name": "Tal the Grove-warden",
+      "role": "skirmisher",
+      "personality": "watchful and reserved",
+      "loyalty": 2,
+      "abilities": ["thorn volley", "beast empathy"],
+      "triggers": ["defend forest", "betrayal of trust"]
+    }
+  ],
+  "usage": "Allies act as AI party members; adjust loyalty using loyalty_rules.json and log with [ally:update]."
+}

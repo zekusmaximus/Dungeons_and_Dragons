@@ -1,0 +1,12 @@
+{
+  "momentum": {
+    "gain": ["landing finishing blows", "narrating vivid risks", "leveraging tone dials"],
+    "spend": ["add +2 to a roll", "seize initiative", "negate a single complication"],
+    "carryover": "Unused momentum resets after scene transition."
+  },
+  "edge_cases": [
+    "Finishing moves end a foe at 0 HP with style; describe collateral.",
+    "Heroic surges allow one extra move when momentum >=2; consume 1 momentum.",
+    "If tone is horror, momentum converts to resolve to resist fear instead of extra attacks."
+  ]
+}

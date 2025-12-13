@@ -1,0 +1,11 @@
+{
+  "template": "haunted_ruin",
+  "rooms": [
+    {"id": "gatehouse", "features": ["flickering lanterns", "phantom footfalls"], "connections": ["hall", "courtyard"]},
+    {"id": "hall", "features": ["echoing chants", "collapsed ceiling"], "connections": ["gatehouse", "crypt"]},
+    {"id": "crypt", "features": ["stone sarcophagi", "cold mist"], "connections": ["hall"]},
+    {"id": "courtyard", "features": ["withered tree", "faded murals"], "connections": ["gatehouse"]}
+  ],
+  "hazards": ["haunting whispers", "falling stones"],
+  "treasures": ["ghostlight candle", "lost vows parchment"]
+}

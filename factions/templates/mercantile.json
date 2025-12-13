@@ -1,0 +1,11 @@
+{
+  "type": "mercantile",
+  "common_traits": ["profit-driven", "networked", "contract-focused"],
+  "default_reputation": 0,
+  "projects": ["open trade routes", "corner a market", "secure supply lines"],
+  "sample_hooks": [
+    "A caravan needs discreet guards willing to ignore certain crates.",
+    "Merchants petition for protection from bandits.",
+    "A price war threatens to spill into sabotage."
+  ]
+}

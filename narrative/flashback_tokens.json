@@ -1,0 +1,8 @@
+{
+  "tokens": {
+    "starting": 1,
+    "gain": ["discover personal tie", "resolve bond scene", "take downtime reflection"],
+    "spend": ["insert past detail to gain advantage", "negate a failed check narratively", "reveal hidden ally"],
+    "limits": "One flashback per scene unless tone is cinematic."
+  }
+}

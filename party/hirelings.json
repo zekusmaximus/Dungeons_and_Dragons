@@ -1,0 +1,22 @@
+{
+  "hirelings": [
+    {
+      "role": "torchbearer",
+      "cost": "2 sp per day",
+      "morale": 7,
+      "risks": "flees if left exposed; loyalty improves with fair pay"
+    },
+    {
+      "role": "porter",
+      "cost": "5 sp per day",
+      "morale": 8,
+      "risks": "drops gear on critical failures; appreciates clear instructions"
+    },
+    {
+      "role": "scout",
+      "cost": "1 gp per day",
+      "morale": 9,
+      "risks": "expects shares of information; may bargain with rivals"
+    }
+  ]
+}

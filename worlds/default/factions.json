@@ -1,0 +1,105 @@
+{
+  "factions": [
+    {
+      "id": "verdant-circle",
+      "name": "Verdant Circle",
+      "ethos": "Stewardship of wild places and patient restoration of balance.",
+      "influence": [
+        "druid groves and wandering circles",
+        "herbalist markets",
+        "rangers patrolling ancient trails"
+      ],
+      "territory": "Forest fringes, sacred springs, and the overgrown ruins north of the capital road.",
+      "typical_npcs": ["druid", "scout", "beast whisperer"],
+      "reputation": {
+        "scale": "-5 (sworn foe) to +5 (trusted ally)",
+        "starting": 0,
+        "notes": "Negative values make them withdraw aid; positive values unlock guidance, potions, and safe paths."
+      },
+      "hooks": [
+        "A corrupted grove bleeds blight into nearby farms; they seek allies to cleanse it.",
+        "Circle emissaries trade rare reagents for news about logging camps."
+      ],
+      "conflicts": [
+        "Opposes unchecked expansion by mercantile guilds.",
+        "Secretly shelters a beast that raiders fear, risking reprisal if revealed."
+      ]
+    },
+    {
+      "id": "iron-syndicate",
+      "name": "Iron Syndicate",
+      "ethos": "Profit, contracts, and control of trade routes through any means necessary.",
+      "influence": [
+        "caravan guards and factors",
+        "warehouse unions",
+        "coin-backed mercenaries"
+      ],
+      "territory": "City foundries, toll bridges, and the river docks.",
+      "typical_npcs": ["guild factor", "enforcer", "smuggler"],
+      "reputation": {
+        "scale": "-5 (blacklisted) to +5 (preferred partner)",
+        "starting": -1,
+        "notes": "Debt favors and completed contracts shift reputation by 1–2 steps; betrayal drops it sharply."
+      },
+      "hooks": [
+        "A missing shipment of ingots threatens a war with the docks union.",
+        "They need discreet negotiators to calm a toll-road strike before the harvest caravans arrive."
+      ],
+      "conflicts": [
+        "Rivals the Shadow Cartel for smuggling rights.",
+        "Bribes rural reeves to push settlers into Verdant Circle lands."
+      ]
+    },
+    {
+      "id": "sunlit-assembly",
+      "name": "Sunlit Assembly",
+      "ethos": "Aid the common folk through ritual light, education, and mutual defense.",
+      "influence": [
+        "wayhouse hospices",
+        "traveling preachers",
+        "scribe schools"
+      ],
+      "territory": "Pilgrim roads, roadside shrines, and district commons.",
+      "typical_npcs": ["acolyte", "scribe", "lay defender"],
+      "reputation": {
+        "scale": "-5 (anathema) to +5 (champion)",
+        "starting": 1,
+        "notes": "Acts of mercy raise reputation; cruelty or sacrilege lowers it swiftly."
+      },
+      "hooks": [
+        "A relic-lamp dims whenever a specific noble's name is spoken—why?",
+        "The Assembly offers sanctuary to refugees fleeing a plague rumor."
+      ],
+      "conflicts": [
+        "Tensions with the Iron Syndicate over tithe disputes.",
+        "Shadows stretch longer near Assembly shrines, hinting at a rival faith."
+      ]
+    },
+    {
+      "id": "shadow-cartel",
+      "name": "Shadow Cartel",
+      "ethos": "Secrets have prices; power flows to those who move unseen.",
+      "influence": [
+        "whisper networks",
+        "black market fences",
+        "information brokers"
+      ],
+      "territory": "Night markets, gambling dens, and the candlelit back-rooms of the old quarter.",
+      "typical_npcs": ["spy", "cutpurse", "lockbreaker"],
+      "reputation": {
+        "scale": "-5 (marked) to +5 (trusted operator)",
+        "starting": -2,
+        "notes": "Reputation shifts whenever secrets are traded or exposed; they track debts ruthlessly."
+      },
+      "hooks": [
+        "A rival crew imported forbidden relics; the Cartel wants them intercepted.",
+        "They offer hidden paths through the city in exchange for silence about a magistrate's vice."
+      ],
+      "conflicts": [
+        "Wars quietly with the Iron Syndicate over routes.",
+        "Hunted by Assembly lantern-keepers investigating disappearances."
+      ]
+    }
+  ],
+  "reputation_scale": "-5 (destroy on sight) to +5 (lifelong allies); use integer steps and log shifts with [faction:update] tags."
+}

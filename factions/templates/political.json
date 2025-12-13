@@ -1,0 +1,11 @@
+{
+  "type": "political",
+  "common_traits": ["civic authority", "bureaucratic", "status-conscious"],
+  "default_reputation": 0,
+  "projects": ["secure charter", "expand jurisdiction", "quell unrest"],
+  "sample_hooks": [
+    "A council seat lies empty after scandal; who fills it?",
+    "Petitioners seek aid bypassing red tape.",
+    "A decree threatens sacred land, sparking protest."
+  ]
+}

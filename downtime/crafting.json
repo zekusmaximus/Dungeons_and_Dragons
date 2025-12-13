@@ -1,0 +1,7 @@
+{
+  "activity": "crafting",
+  "requirements": ["materials", "tools proficiency", "downtime days"],
+  "resolution": "Deterministic progress: map d20 to progress points; complete when cost threshold met.",
+  "complications": ["materials spoiled", "tool damage", "unsafe experiment"],
+  "log_tag": "[downtime:craft]"
+}

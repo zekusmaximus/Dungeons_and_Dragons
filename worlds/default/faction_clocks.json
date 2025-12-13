@@ -1,0 +1,69 @@
+{
+  "projects": [
+    {
+      "id": "iron-road-expansion",
+      "faction": "iron-syndicate",
+      "goal": "Control every toll-road leading into the capital.",
+      "segments": 8,
+      "filled": 2,
+      "triggers": ["successfully negotiating labor deals", "bribing magistrates", "sabotaging rival caravans"],
+      "consequences": {
+        "on_fill": "Syndicate taxes all traffic; prices rise and Assembly clinics feel the strain.",
+        "player_facing": [
+          "Increased travel costs until the project is rolled back",
+          "Syndicate enforcers demand papers at bridges (disadvantage on stealthy travel)"
+        ]
+      }
+    },
+    {
+      "id": "circle-restoration",
+      "faction": "verdant-circle",
+      "goal": "Cleanse the blighted grove and rebind its guardian spirit.",
+      "segments": 6,
+      "filled": 1,
+      "triggers": ["healing rituals", "delivering rare reagents", "defending the grove from loggers"],
+      "consequences": {
+        "on_fill": "Safe trails open and the Circle offers fast travel and herbal aid.",
+        "player_facing": [
+          "Temporary safe passage through forest encounters",
+          "Access to potent salves (advantage on the next three healing checks)"
+        ]
+      }
+    },
+    {
+      "id": "cartel-lockdown",
+      "faction": "shadow-cartel",
+      "goal": "Silence informants before the Assembly lantern-keepers expose their network.",
+      "segments": 4,
+      "filled": 0,
+      "triggers": ["failed stealth scenes", "revealed secrets", "unpaid information debts"],
+      "consequences": {
+        "on_fill": "Cartel vanishes into the alleys, making rumor-gathering far harder.",
+        "player_facing": [
+          "Rumor checks suffer -2 until the lockdown eases",
+          "Cartel agents shadow the party (log [faction:update] if confronted)"
+        ]
+      }
+    },
+    {
+      "id": "assembly-radiance",
+      "faction": "sunlit-assembly",
+      "goal": "Spread lantern schools to every village within a fortnight's travel.",
+      "segments": 12,
+      "filled": 3,
+      "triggers": ["successful aid missions", "festivals hosted", "defense of pilgrims"],
+      "consequences": {
+        "on_fill": "Hope blossoms; despairing NPCs rally and offer resources to heroes.",
+        "player_facing": [
+          "Advantage on morale checks in Assembly settlements",
+          "Pilgrim routes become secure (fewer hostile encounters)"
+        ]
+      }
+    }
+  ],
+  "advancement_rules": {
+    "downtime": "During downtime, advance one relevant clock by 1 segment if the party invests time/resources.",
+    "fail_forward": "On failures that complicate the situation, fill rival clocks instead of halting play.",
+    "scene_tags": "Every impactful scene should log clock changes with [faction:update] and [timeline:advance]."
+  }
+}

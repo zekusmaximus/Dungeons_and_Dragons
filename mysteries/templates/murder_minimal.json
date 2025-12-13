@@ -1,0 +1,11 @@
+{
+  "template": "murder_minimal",
+  "crime": "A factor is found slain near the docks with a ledger missing.",
+  "suspects": ["dockworker unionist", "shadow cartel agent", "jealous partner"],
+  "clues": [
+    "Rust-red fibers from a syndicate cloak",
+    "Footprints leading toward the marsh",
+    "Ledger code referencing a secret toll"
+  ],
+  "twists": ["Victim faked death", "Murder weapon is a relic sought by the Assembly"]
+}

@@ -1,0 +1,7 @@
+{
+  "activity": "carousing",
+  "requirements": ["downtime evening", "2 gp per participant"],
+  "resolution": "Use deterministic dice to find contacts, rumors, or trouble.",
+  "complications": ["bar brawl fines", "offended noble", "lost purse"],
+  "log_tag": "[downtime:carouse]"
+}

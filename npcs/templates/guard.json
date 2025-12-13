@@ -1,0 +1,11 @@
+{
+  "archetype": "guard",
+  "motives": ["maintain order", "earn commendations", "avoid scandal"],
+  "skills": ["watch", "intimidate", "routine patrol"],
+  "stat_block": {"ac": 16, "hp": 11, "attack": "+3 spear"},
+  "scene_prompts": [
+    "demands travel papers",
+    "warns about curfew",
+    "asks for backup against smugglers"
+  ]
+}
