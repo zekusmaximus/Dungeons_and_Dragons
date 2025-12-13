@@ -2,7 +2,24 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "SessionState",
   "type": "object",
-  "required": ["character", "turn", "scene_id", "location", "hp", "conditions", "flags", "log_index"],
+  "required": [
+    "character",
+    "turn",
+    "scene_id",
+    "location",
+    "hp",
+    "conditions",
+    "flags",
+    "log_index",
+    "world",
+    "hex",
+    "time",
+    "weather",
+    "travel_pace",
+    "exhaustion",
+    "quests",
+    "gp"
+  ],
   "additionalProperties": false,
   "properties": {
     "character": {"type": "string"},
@@ -18,6 +35,25 @@
       "type": "object",
       "additionalProperties": true
     },
-    "log_index": {"type": "integer", "minimum": 0}
+    "log_index": {"type": "integer", "minimum": 0},
+    "world": {"type": "string"},
+    "hex": {
+      "type": "object",
+      "required": ["q", "r"],
+      "properties": {
+        "q": {"type": "integer"},
+        "r": {"type": "integer"}
+      },
+      "additionalProperties": false
+    },
+    "time": {"type": "string", "format": "date-time"},
+    "weather": {"type": "string"},
+    "travel_pace": {"type": "string"},
+    "exhaustion": {"type": "integer", "minimum": 0},
+    "quests": {
+      "type": "object",
+      "additionalProperties": {"type": "object"}
+    },
+    "gp": {"type": "integer", "minimum": 0}
   }
 }

@@ -1,0 +1,26 @@
+{
+  "name": "Forest Features",
+  "dice": "1d20",
+  "rows": [
+    {"range": [1,1], "result": {"feature": "Abandoned camp"}},
+    {"range": [2,2], "result": {"feature": "Crystal spring"}},
+    {"range": [3,3], "result": {"feature": "Mossy stones"}},
+    {"range": [4,4], "result": {"feature": "Hanging snare"}},
+    {"range": [5,5], "result": {"feature": "Broken cart"}},
+    {"range": [6,6], "result": {"feature": "Ancient oak"}},
+    {"range": [7,7], "result": {"feature": "Carved totem"}},
+    {"range": [8,8], "result": {"feature": "Fallen log bridge"}},
+    {"range": [9,9], "result": {"feature": "Overgrown trail"}},
+    {"range": [10,10], "result": {"feature": "Hidden burrow"}},
+    {"range": [11,11], "result": {"feature": "Wild berries"}},
+    {"range": [12,12], "result": {"feature": "Web-draped trees"}},
+    {"range": [13,13], "result": {"feature": "Stone marker"}},
+    {"range": [14,14], "result": {"feature": "Ruin arch"}},
+    {"range": [15,15], "result": {"feature": "Fog bank"}},
+    {"range": [16,16], "result": {"feature": "Bee hive"}},
+    {"range": [17,17], "result": {"feature": "Cracked idol"}},
+    {"range": [18,18], "result": {"feature": "Sinkhole"}},
+    {"range": [19,19], "result": {"feature": "Stump circle"}},
+    {"range": [20,20], "result": {"feature": "Glowing fungi"}}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "General Rumors",
+  "dice": "1d12",
+  "rows": [
+    {"range": [1,1], "result": {"text": "A ruined shrine hides in the forest."}},
+    {"range": [2,2], "result": {"text": "Bandits follow an old logging road."}},
+    {"range": [3,3], "result": {"text": "A ranger saw lights near the marsh."}},
+    {"range": [4,4], "result": {"text": "Travelers vanished on the north path."}},
+    {"range": [5,5], "result": {"text": "A relic is said to rest in a vine-wrapped ruin."}},
+    {"range": [6,6], "result": {"text": "Druids mark trees to ward spirits."}},
+    {"range": [7,7], "result": {"text": "Storms have been stranger lately."}},
+    {"range": [8,8], "result": {"text": "A merchant lost a pack mule in the hills."}},
+    {"range": [9,9], "result": {"text": "Wolves gather under a pale moon."}},
+    {"range": [10,10], "result": {"text": "The baron wants relics recovered."}},
+    {"range": [11,11], "result": {"text": "Old roads sink into a mire near the river."}},
+    {"range": [12,12], "result": {"text": "A hermit trades secrets for food."}}
+  ]
+}

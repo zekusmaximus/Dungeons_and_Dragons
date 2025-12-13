@@ -1,0 +1,9 @@
+{
+  "name": "Default Region",
+  "hexes": [
+    {"q": 0, "r": 0, "biome": "forest", "tags": ["start"], "neighbors": [{"q": 1, "r": 0}, {"q": 0, "r": 1}]},
+    {"q": 1, "r": 0, "biome": "forest", "tags": [], "neighbors": [{"q": 0, "r": 0}, {"q": 1, "r": 1}]},
+    {"q": 0, "r": 1, "biome": "hills", "tags": [], "neighbors": [{"q": 0, "r": 0}, {"q": 1, "r": 1}]},
+    {"q": 1, "r": 1, "biome": "plains", "tags": [], "neighbors": [{"q": 1, "r": 0}, {"q": 0, "r": 1}]}
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Quest",
+  "type": "object",
+  "required": ["id", "name", "objectives", "nodes", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "name": {"type": "string"},
+    "status": {"type": "string"},
+    "objectives": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "hex", "biome"],
+        "properties": {
+          "id": {"type": "string"},
+          "hex": {"type": "object", "required": ["q", "r"], "properties": {"q": {"type": "integer"}, "r": {"type": "integer"}}, "additionalProperties": false},
+          "biome": {"type": "string"},
+          "description": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

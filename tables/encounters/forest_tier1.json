@@ -1,0 +1,26 @@
+{
+  "name": "Forest Tier 1 Encounters",
+  "dice": "1d20",
+  "tags": ["forest", "tier1"],
+  "rows": [
+    {"range": [1,2], "result": {"id": "quiet_trail", "description": "Uneventful path"}},
+    {"range": [3,3], "result": {"id": "lost_child", "description": "A child seeks help"}},
+    {"range": [4,4], "result": {"id": "scout_wolves", "description": "Wolves on the move"}},
+    {"range": [5,5], "result": {"id": "goblin_patrol", "description": "Four goblins scouting"}},
+    {"range": [6,6], "result": {"id": "pixie_prank", "description": "Pixies cause mischief"}},
+    {"range": [7,7], "result": {"id": "fallen_tree", "description": "Blocked path"}},
+    {"range": [8,8], "result": {"id": "owlbear_tracks", "description": "Fresh predator tracks"}},
+    {"range": [9,9], "result": {"id": "bandit_camp", "description": "Hidden fire"}},
+    {"range": [10,10], "result": {"id": "ruined_shrine", "description": "Vines cover an altar"}},
+    {"range": [11,11], "result": {"id": "feylights", "description": "Will-o'-wisps glimmer"}},
+    {"range": [12,12], "result": {"id": "trapper", "description": "Hunter shares news"}},
+    {"range": [13,13], "result": {"id": "foragers", "description": "Villagers gathering herbs"}},
+    {"range": [14,14], "result": {"id": "spriggan", "description": "Animated stump"}},
+    {"range": [15,15], "result": {"id": "mire", "description": "Soggy patch slows travel"}},
+    {"range": [16,16], "result": {"id": "elk_herd", "description": "Startled elk stampede"}},
+    {"range": [17,17], "result": {"id": "reclusive_druid", "description": "Druid warns of danger"}},
+    {"range": [18,18], "result": {"id": "spiders", "description": "Webs across branches"}},
+    {"range": [19,19], "result": {"id": "forest_fire", "description": "Smoke on the wind"}},
+    {"range": [20,20], "result": {"id": "ancient_tree", "description": "Tree whispers a secret"}}
+  ]
+}

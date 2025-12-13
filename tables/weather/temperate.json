@@ -1,0 +1,25 @@
+{
+  "name": "Temperate Weather",
+  "dice": "1d20",
+  "rows": [
+    {"range": [1,2], "result": {"condition": "clear"}},
+    {"range": [3,3], "result": {"condition": "sunny"}},
+    {"range": [4,4], "result": {"condition": "breezy"}},
+    {"range": [5,5], "result": {"condition": "overcast"}},
+    {"range": [6,6], "result": {"condition": "light rain"}},
+    {"range": [7,7], "result": {"condition": "steady rain"}},
+    {"range": [8,8], "result": {"condition": "fog"}},
+    {"range": [9,9], "result": {"condition": "storm"}},
+    {"range": [10,10], "result": {"condition": "windstorm"}},
+    {"range": [11,11], "result": {"condition": "drizzle"}},
+    {"range": [12,12], "result": {"condition": "humid"}},
+    {"range": [13,13], "result": {"condition": "chilly"}},
+    {"range": [14,14], "result": {"condition": "warm"}},
+    {"range": [15,15], "result": {"condition": "heatwave"}},
+    {"range": [16,16], "result": {"condition": "cool breeze"}},
+    {"range": [17,17], "result": {"condition": "hail"}},
+    {"range": [18,18], "result": {"condition": "distant thunder"}},
+    {"range": [19,19], "result": {"condition": "rainbows"}},
+    {"range": [20,20], "result": {"condition": "arcane aurora"}}
+  ]
+}

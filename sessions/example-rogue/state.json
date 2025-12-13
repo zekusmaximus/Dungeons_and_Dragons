@@ -6,5 +6,13 @@
   "hp": 21,
   "conditions": [],
   "flags": {},
-  "log_index": 0
+  "log_index": 0,
+  "world": "default",
+  "hex": {"q": 0, "r": 0},
+  "time": "2023-01-01T00:00:00Z",
+  "weather": "clear",
+  "travel_pace": "normal",
+  "exhaustion": 0,
+  "quests": {},
+  "gp": 0
 }
