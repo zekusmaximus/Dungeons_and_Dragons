@@ -1,0 +1,15 @@
+{
+  "id": "fetch_relic_forest_ruin",
+  "name": "Retrieve the Forest Relic",
+  "biomes": ["forest", "hills"],
+  "objectives": [
+    "Locate the ruined shrine in the forest",
+    "Recover the vine-wrapped relic",
+    "Return safely to camp"
+  ],
+  "nodes": [
+    {"id": "lead", "biome": "forest", "description": "Tracks leading toward a ruin"},
+    {"id": "ruin", "biome": "forest", "description": "Vine-choked shrine holding the relic"},
+    {"id": "chase", "biome": "hills", "description": "Pursuers give chase across the ridge"}
+  ]
+}

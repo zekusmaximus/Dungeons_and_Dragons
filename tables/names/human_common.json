@@ -1,0 +1,26 @@
+{
+  "name": "Human Names",
+  "dice": "1d20",
+  "rows": [
+    {"range": [1,1], "result": {"name": "Alden"}},
+    {"range": [2,2], "result": {"name": "Brina"}},
+    {"range": [3,3], "result": {"name": "Corin"}},
+    {"range": [4,4], "result": {"name": "Dara"}},
+    {"range": [5,5], "result": {"name": "Eamon"}},
+    {"range": [6,6], "result": {"name": "Fira"}},
+    {"range": [7,7], "result": {"name": "Garrick"}},
+    {"range": [8,8], "result": {"name": "Hale"}},
+    {"range": [9,9], "result": {"name": "Iris"}},
+    {"range": [10,10], "result": {"name": "Jaren"}},
+    {"range": [11,11], "result": {"name": "Kara"}},
+    {"range": [12,12], "result": {"name": "Lysa"}},
+    {"range": [13,13], "result": {"name": "Mira"}},
+    {"range": [14,14], "result": {"name": "Nolan"}},
+    {"range": [15,15], "result": {"name": "Orin"}},
+    {"range": [16,16], "result": {"name": "Pella"}},
+    {"range": [17,17], "result": {"name": "Quin"}},
+    {"range": [18,18], "result": {"name": "Risa"}},
+    {"range": [19,19], "result": {"name": "Sorin"}},
+    {"range": [20,20], "result": {"name": "Tessa"}}
+  ]
+}

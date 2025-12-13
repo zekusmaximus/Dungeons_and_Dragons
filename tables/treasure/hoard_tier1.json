@@ -1,0 +1,25 @@
+{
+  "name": "Tier 1 Hoard",
+  "dice": "1d20",
+  "rows": [
+    {"range": [1,2], "result": {"gp": 25, "items": ["tarnished ring"]}},
+    {"range": [3,3], "result": {"gp": 30, "items": ["silver earring"]}},
+    {"range": [4,4], "result": {"gp": 40, "items": ["carved bone idol"]}},
+    {"range": [5,5], "result": {"gp": 50, "items": ["bundle of trade goods"]}},
+    {"range": [6,6], "result": {"gp": 60, "items": ["healer's kit"]}},
+    {"range": [7,7], "result": {"gp": 70, "items": ["potion of climbing"]}},
+    {"range": [8,8], "result": {"gp": 80, "items": ["engraved dagger"]}},
+    {"range": [9,9], "result": {"gp": 90, "items": ["obsidian shard"]}},
+    {"range": [10,10], "result": {"gp": 100, "items": ["scroll of bless"]}},
+    {"range": [11,11], "result": {"gp": 110, "items": ["cloak clasp"]}},
+    {"range": [12,12], "result": {"gp": 120, "items": ["onyx chess piece"]}},
+    {"range": [13,13], "result": {"gp": 130, "items": ["quiver of arrows"]}},
+    {"range": [14,14], "result": {"gp": 140, "items": ["potion of healing"]}},
+    {"range": [15,15], "result": {"gp": 150, "items": ["gemstone trio"]}},
+    {"range": [16,16], "result": {"gp": 160, "items": ["bronze circlet"]}},
+    {"range": [17,17], "result": {"gp": 170, "items": ["map fragment"]}},
+    {"range": [18,18], "result": {"gp": 180, "items": ["feather token"]}},
+    {"range": [19,19], "result": {"gp": 190, "items": ["fine cloak"]}},
+    {"range": [20,20], "result": {"gp": 200, "items": ["enchanted charm"]}}
+  ]
+}

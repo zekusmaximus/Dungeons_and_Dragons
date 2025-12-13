@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HexMap",
+  "type": "object",
+  "required": ["name", "hexes"],
+  "properties": {
+    "name": {"type": "string"},
+    "hexes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["q", "r", "biome", "neighbors"],
+        "properties": {
+          "q": {"type": "integer"},
+          "r": {"type": "integer"},
+          "biome": {"type": "string"},
+          "tags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "default": []
+          },
+          "neighbors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["q", "r"],
+              "properties": {
+                "q": {"type": "integer"},
+                "r": {"type": "integer"}
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

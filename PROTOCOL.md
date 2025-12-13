@@ -63,3 +63,12 @@ On schema validation errors, revert edits for the failing file and write a diagn
 
 ## Commit Discipline
 The DM MUST commit after each turn using the specified format, ensuring state, transcript, and changelog are consistent with consumed dice.
+
+## v2 Procedures
+- Exploration: run `python tools/explore.py --slug <slug> --steps N --pace normal` to advance hexes, roll weather/encounters/features, and log `entropy_index` values. Commit with tag `[travel:hex]`.
+- Quest initialization: `python quests/generator.py --slug <slug> --template <template>` binds quest nodes to matching biomes and logs a hook. Commit with `[quest:init]`.
+- Encounter resolution: `python tools/resolve_encounter.py --slug <slug> --monster <path>` executes initiative and a combat round. Commit with `[encounter:resolve]`.
+- Loot: `python tools/loot.py --slug <slug>` rolls treasure tables and updates state. Commit with `[loot:roll]`.
+- Downtime: `python tools/downtime.py --slug <slug> --activity <train|craft|carouse>` consumes time and gp. Commit with `[downtime:train]` (or activity).
+- Rules search: build the local TF-IDF index with `python tools/index_rules.py` then query with `python tools/search_rules.py "<terms>"`; cite results as `(rules: file#Lx–Ly)` in transcripts.
+- Always respect lock files and schema validation using `tools/validate.py`; branching for player choices remains governed by `turn.md`.

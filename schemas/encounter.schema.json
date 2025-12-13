@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EncounterLog",
+  "type": "object",
+  "required": ["stamp", "rounds", "outcome"],
+  "properties": {
+    "stamp": {"type": "string"},
+    "rounds": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "outcome": {"type": "string"},
+    "rolls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "expression": {"type": "string"},
+          "result": {"type": "number"},
+          "entropy_index": {"type": "integer"}
+        },
+        "required": ["expression", "result", "entropy_index"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
