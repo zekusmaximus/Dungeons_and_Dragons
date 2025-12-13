@@ -1,0 +1,72 @@
+[
+  {
+    "name": "Acolyte",
+    "skill_proficiencies": ["insight", "religion"],
+    "tool_proficiencies": ["calligrapher's supplies"],
+    "feature": "Shelter of the Faithful",
+    "equipment": ["Holy symbol", "Prayer book", "5 sticks of incense", "Vestments", "Common clothes", "15 gp"]
+  },
+  {
+    "name": "Criminal",
+    "skill_proficiencies": ["deception", "stealth"],
+    "tool_proficiencies": ["thieves' tools", "gaming set"],
+    "feature": "Criminal Contact",
+    "equipment": ["Crowbar", "Dark clothes", "Hood", "15 gp"]
+  },
+  {
+    "name": "Folk Hero",
+    "skill_proficiencies": ["animal handling", "survival"],
+    "tool_proficiencies": ["vehicles (land)", "artisan's tools"],
+    "feature": "Rustic Hospitality",
+    "equipment": ["Shovel", "Iron pot", "Common clothes", "10 gp"]
+  },
+  {
+    "name": "Noble",
+    "skill_proficiencies": ["history", "persuasion"],
+    "tool_proficiencies": ["gaming set"],
+    "feature": "Position of Privilege",
+    "equipment": ["Fine clothes", "Signet ring", "Scroll of pedigree", "25 gp"]
+  },
+  {
+    "name": "Sage",
+    "skill_proficiencies": ["arcana", "history"],
+    "tool_proficiencies": ["calligrapher's supplies"],
+    "feature": "Researcher",
+    "equipment": ["Bottle of ink", "Quill", "Small knife", "Letter from colleague", "Common clothes", "10 gp"]
+  },
+  {
+    "name": "Sailor",
+    "skill_proficiencies": ["athletics", "perception"],
+    "tool_proficiencies": ["navigator's tools", "vehicles (water)", "bo'sun whistle"],
+    "feature": "Ship's Passage",
+    "equipment": ["Belaying pin", "Rope (50 ft)", "Lucky charm", "Common clothes", "10 gp"]
+  },
+  {
+    "name": "Soldier",
+    "skill_proficiencies": ["athletics", "intimidation"],
+    "tool_proficiencies": ["gaming set", "vehicles (land)", "insignia of rank"],
+    "feature": "Military Rank",
+    "equipment": ["Trophy from a fallen enemy", "Bone dice", "Common clothes", "10 gp"]
+  },
+  {
+    "name": "Urchin",
+    "skill_proficiencies": ["sleight of hand", "stealth"],
+    "tool_proficiencies": ["disguise kit", "thieves' tools"],
+    "feature": "City Secrets",
+    "equipment": ["Small knife", "Map of city", "Pet mouse", "Common clothes", "10 gp"]
+  },
+  {
+    "name": "Hermit",
+    "skill_proficiencies": ["medicine", "religion"],
+    "tool_proficiencies": ["herbalism kit"],
+    "feature": "Discovery",
+    "equipment": ["Scroll case", "Blanket", "Herbalism kit", "Common clothes", "5 gp"]
+  },
+  {
+    "name": "Guild Artisan",
+    "skill_proficiencies": ["insight", "persuasion"],
+    "tool_proficiencies": ["artisan's tools"],
+    "feature": "Guild Membership",
+    "equipment": ["Artisan's tools", "Letter of introduction", "Traveler's clothes", "15 gp"]
+  }
+]

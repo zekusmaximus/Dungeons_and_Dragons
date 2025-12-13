@@ -72,3 +72,12 @@ The DM MUST commit after each turn using the specified format, ensuring state, t
 - Downtime: `python tools/downtime.py --slug <slug> --activity <train|craft|carouse>` consumes time and gp. Commit with `[downtime:train]` (or activity).
 - Rules search: build the local TF-IDF index with `python tools/index_rules.py` then query with `python tools/search_rules.py "<terms>"`; cite results as `(rules: file#Lx–Ly)` in transcripts.
 - Always respect lock files and schema validation using `tools/validate.py`; branching for player choices remains governed by `turn.md`.
+
+## Character Creation Mode
+- Detect creation requests in `sessions/<slug>/turn.md` that begin with "Start a new character".
+- Follow `character_creation/steps.json` sequentially, asking one clear question in `turn.md` after each completed step.
+- Use deterministic dice from `dice/entropy.ndjson` for ability scores and any random tables, recording each `entropy_index` in `creation_progress.json` and `changelog.md`.
+- Persist interim choices in `sessions/<slug>/creation_progress.json` and delete the file once creation finalizes.
+- On finalize, create `data/characters/<slug>.json`, initialize `sessions/<slug>/state.json`, append a creation entry to `sessions/<slug>/changelog.md`, and seed `sessions/<slug>/transcript.md` with a creation summary.
+- Overwrite `turn.md` with the first adventure prompt, set `state.scene_id` to `creation-complete`, update `state.log_index` to the latest entropy index, and remove `LOCK`.
+- Commit every creation step with the `[character:create]` tag (e.g., `dm(<slug>): [character:create] step=abilities; details...`).

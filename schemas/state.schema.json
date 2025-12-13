@@ -11,14 +11,9 @@
     "conditions",
     "flags",
     "log_index",
-    "world",
-    "hex",
-    "time",
-    "weather",
-    "travel_pace",
-    "exhaustion",
-    "quests",
-    "gp"
+    "level",
+    "xp",
+    "inventory"
   ],
   "additionalProperties": false,
   "properties": {
@@ -36,6 +31,13 @@
       "additionalProperties": true
     },
     "log_index": {"type": "integer", "minimum": 0},
+    "level": {"type": "integer", "minimum": 1},
+    "xp": {"type": "integer", "minimum": 0},
+    "inventory": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "conditions_detail": {"type": "array", "items": {"type": "string"}},
     "world": {"type": "string"},
     "hex": {
       "type": "object",

@@ -1,0 +1,20 @@
+{
+  "class_kits": [
+    {"class": "Fighter", "items": ["Chain mail", "Shield", "Longsword", "Light crossbow (20 bolts)", "Explorer's pack"]},
+    {"class": "Rogue", "items": ["Leather armor", "Rapier", "Shortbow (20 arrows)", "Thieves' tools", "Dagger", "Burglar's pack"]},
+    {"class": "Wizard", "items": ["Quarterstaff", "Spellbook", "Component pouch", "Scholar's pack", "Dagger"]},
+    {"class": "Cleric", "items": ["Scale mail", "Shield", "Mace", "Holy symbol", "Priest's pack"]}
+  ],
+  "background_kits": [
+    {"background": "Acolyte", "items": ["Holy symbol", "Prayer book", "5 sticks of incense", "Vestments", "Common clothes", "15 gp"]},
+    {"background": "Criminal", "items": ["Crowbar", "Dark clothes", "Hood", "15 gp"]},
+    {"background": "Folk Hero", "items": ["Shovel", "Iron pot", "Common clothes", "10 gp"]},
+    {"background": "Noble", "items": ["Fine clothes", "Signet ring", "Scroll of pedigree", "25 gp"]},
+    {"background": "Sage", "items": ["Bottle of ink", "Quill", "Small knife", "Common clothes", "10 gp"]},
+    {"background": "Sailor", "items": ["Belaying pin", "Rope (50 ft)", "Lucky charm", "Common clothes", "10 gp"]},
+    {"background": "Soldier", "items": ["Trophy from a fallen enemy", "Bone dice", "Common clothes", "10 gp"]},
+    {"background": "Urchin", "items": ["Small knife", "Map of city", "Pet mouse", "Common clothes", "10 gp"]},
+    {"background": "Hermit", "items": ["Scroll case", "Blanket", "Herbalism kit", "Common clothes", "5 gp"]},
+    {"background": "Guild Artisan", "items": ["Artisan's tools", "Letter of introduction", "Traveler's clothes", "15 gp"]}
+  ]
+}
