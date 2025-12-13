@@ -1,0 +1,10 @@
+{
+  "character": "example-rogue",
+  "turn": 0,
+  "scene_id": "init",
+  "location": "CityGate",
+  "hp": 21,
+  "conditions": [],
+  "flags": {},
+  "log_index": 0
+}
