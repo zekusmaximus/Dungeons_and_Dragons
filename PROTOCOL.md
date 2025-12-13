@@ -73,6 +73,20 @@ The DM MUST commit after each turn using the specified format, ensuring state, t
 - Rules search: build the local TF-IDF index with `python tools/index_rules.py` then query with `python tools/search_rules.py "<terms>"`; cite results as `(rules: file#Lx–Ly)` in transcripts.
 - Always respect lock files and schema validation using `tools/validate.py`; branching for player choices remains governed by `turn.md`.
 
+## v3 Procedures
+- Faction and clock updates are required after significant player decisions; update `worlds/<world>/faction_clocks.json` and `worlds/<world>/factions.json` reputation fields, logging entries with `[faction:update]` and `[timeline:advance]` where appropriate.
+- Propagate rumors during downtime or scene resolution using `worlds/<world>/rumors.json` and `rumors/ecology.json`, logging with `[rumor:spread]` and recording tone influence.
+- Advance regional timelines after major travel or downtime, referencing `worlds/<world>/timeline.json` and tagging `[timeline:advance]`.
+- Manage allies and hirelings per `party/` rules, adjusting loyalty and recording `[ally:update]`.
+- Frame every scene with `exploration/beats.json` and `narrative/scene_framing_engine.py`; log `[scene:frame]` and adhere to tone dials and selected narrative mode.
+- Initialize and progress mysteries via `mysteries/engines/generate_mystery.py` and `resolve_clue.py`, tagging `[mystery:init]` and `[mystery:clue]` while updating session mysteries.
+- Generate and populate locations with `locations/builders/generate_location.py` and `populate_rooms.py`; use commit tags `[location:init]` and `[location:populate]`.
+- Select tactical stances at combat start per `combat/stances.json`; track advantages with `combat/advantage_rules.json` and `sessions/<slug>/advantages.json` using `[stance:select]` and `[advantage:update]`.
+- Maintain automatic journaling by appending takeaways to `sessions/<slug>/journal.md` after major scenes, tagging `[journal:update]`.
+- Create snapshots with `meta/snapshots.py` on level-ups, quest completion, region transitions, faction clock advancements, and mystery resolution, tagging `[snapshot:create]`.
+- Run `meta/recap.py` before major scenes when requested, tagging `[recap:generate]` and reflecting findings in `turn.md`.
+- Commit tags available for v3: `[world:update]`, `[faction:update]`, `[rumor:spread]`, `[timeline:advance]`, `[npc:memory]`, `[ally:update]`, `[stance:select]`, `[advantage:update]`, `[scene:frame]`, `[mystery:init]`, `[mystery:clue]`, `[location:init]`, `[location:populate]`, `[snapshot:create]`, `[journal:update]`, `[recap:generate]`.
+
 ## Character Creation Mode
 - Detect creation requests in `sessions/<slug>/turn.md` that begin with "Start a new character".
 - Follow `character_creation/steps.json` sequentially, asking one clear question in `turn.md` after each completed step.

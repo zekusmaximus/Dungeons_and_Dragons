@@ -1,0 +1,18 @@
+{
+  "structure": "Regional timeline events sorted by in-world time and triggers.",
+  "default_world": "default",
+  "events": [
+    {
+      "id": "default:t0-new-moon",
+      "world": "default",
+      "ref": "worlds/default/timeline.json#events/0",
+      "notes": "Kickoff courier beat introduces Assembly hook."
+    },
+    {
+      "id": "default:t5-dawn-parley",
+      "world": "default",
+      "ref": "worlds/default/timeline.json#events/5",
+      "notes": "Use to converge faction clocks; demands recap before negotiation."
+    }
+  ]
+}

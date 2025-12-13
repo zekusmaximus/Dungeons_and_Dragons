@@ -1,0 +1,7 @@
+{
+  "activity": "research",
+  "requirements": ["library or expert", "downtime day", "access payment"],
+  "resolution": "Spend progress points earned via deterministic rolls to buy clues or lore.",
+  "complications": ["forbidden tome attracts attention", "loud debates", "dangerous revelation"],
+  "log_tag": "[downtime:research]"
+}

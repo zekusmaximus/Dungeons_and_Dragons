@@ -1,0 +1,50 @@
+{
+  "combat": {
+    "setup": "Spot terrain, foes, and stakes; declare stances.",
+    "escalation": "Reinforcements, hazards, or shifting objectives.",
+    "twist": "Environmental complication or unexpected tactic.",
+    "climax": "Decisive exchange or finishing move.",
+    "fallout": "Aftermath, loot, injuries, morale.",
+    "next_step_prompt": "What do you secure or pursue after the clash?"
+  },
+  "intrigue": {
+    "setup": "Establish factions, gossip sources, and leverage.",
+    "escalation": "Secrets emerge; pressure mounts to choose a side.",
+    "twist": "A confidant betrays or reveals new loyalties.",
+    "climax": "Deal struck or scheme exposed.",
+    "fallout": "Reputation shifts, favors owed, rumors updated.",
+    "next_step_prompt": "Who do you inform, deceive, or meet next?"
+  },
+  "revelation": {
+    "setup": "Lay clues in view; hint at stakes.",
+    "escalation": "Clues cohere; tension builds toward discovery.",
+    "twist": "Evidence contradicts assumptions.",
+    "climax": "Core secret revealed or theory confirmed.",
+    "fallout": "Update mysteries, clocks, and NPC attitudes.",
+    "next_step_prompt": "How do you act on what you learned?"
+  },
+  "horror": {
+    "setup": "Unease, sensory cues, and isolation.",
+    "escalation": "Threat closes in; safety erodes.",
+    "twist": "Fear spreads or source changes form.",
+    "climax": "Confrontation or escape attempt.",
+    "fallout": "Lingering dread, corruption, or trauma.",
+    "next_step_prompt": "What anchor or ritual do you seek for safety?"
+  },
+  "chase": {
+    "setup": "Who pursues, who flees, and what terrain?",
+    "escalation": "Obstacles and shortcuts appear.",
+    "twist": "Path forks or stakes invert.",
+    "climax": "Capture, escape, or standoff.",
+    "fallout": "Spoils claimed, resources spent, positions changed.",
+    "next_step_prompt": "Where do you hide, recover, or press the advantage?"
+  },
+  "negotiation": {
+    "setup": "Define wants, leverage, and tone.",
+    "escalation": "Offers and threats sharpen.",
+    "twist": "Third party interferes or shifts demands.",
+    "climax": "Agreement, stalemate, or betrayal.",
+    "fallout": "Contracts, alliances, and reputation adjust.",
+    "next_step_prompt": "Who must be informed or placated about the deal?"
+  }
+}

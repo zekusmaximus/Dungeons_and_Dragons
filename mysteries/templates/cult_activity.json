@@ -1,0 +1,11 @@
+{
+  "template": "cult_activity",
+  "crime": "Disciples perform midnight rites that drain color from crops.",
+  "suspects": ["farmhand convert", "traveling preacher", "masked stranger"],
+  "clues": [
+    "Chalk sigils under bridge stones",
+    "Offerings missing from Assembly shrines",
+    "Whispers of a silver-masked figure at markets"
+  ],
+  "twists": ["Cult serves a faction rival", "Ritual is trying to prevent a worse threat"]
+}

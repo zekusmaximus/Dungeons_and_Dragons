@@ -1,0 +1,7 @@
+{
+  "activity": "training",
+  "requirements": ["mentor or regimen", "downtime week"],
+  "resolution": "Track progress across weeks; deterministic rolls grant skill or language proficiency when threshold met.",
+  "complications": ["injury delays", "mentor called away", "cost overruns"],
+  "log_tag": "[downtime:train]"
+}

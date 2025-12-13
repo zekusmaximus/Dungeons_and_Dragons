@@ -1,0 +1,11 @@
+{
+  "template": "theft_minimal",
+  "crime": "A relic lantern disappears from a roadside shrine.",
+  "suspects": ["desperate pilgrim", "collector's agent", "Cartel cutpurse"],
+  "clues": [
+    "Lantern soot on a noble's crest",
+    "Witness saw a mule with silver tack",
+    "Prayer scroll torn into cipher strips"
+  ],
+  "twists": ["Lantern was swapped with an imitation", "Relic walked off under its own light"]
+}

@@ -1,0 +1,19 @@
+{
+  "gains": [
+    "Share treasure or spotlight",
+    "Save an ally from harm",
+    "Honor their code or vow"
+  ],
+  "losses": [
+    "Break promises",
+    "Needless risk to ally",
+    "Side with a rival faction"
+  ],
+  "thresholds": {
+    "desertion": -3,
+    "wavering": 0,
+    "steadfast": 3,
+    "fierce": 5
+  },
+  "logging": "Track loyalty shifts in changelog.md using [ally:update] and annotate trigger."
+}

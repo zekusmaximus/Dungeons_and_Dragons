@@ -1,0 +1,11 @@
+{
+  "template": "dungeon_basic",
+  "rooms": [
+    {"id": "entry", "features": ["sealed door", "dusty tracks"], "connections": ["hall"]},
+    {"id": "hall", "features": ["fallen banners"], "connections": ["entry", "treasury", "cells"]},
+    {"id": "treasury", "features": ["empty chests", "hidden niche"], "connections": ["hall"]},
+    {"id": "cells", "features": ["rusted bars", "scratched notes"], "connections": ["hall"]}
+  ],
+  "hazards": ["swinging blade", "poison darts"],
+  "treasures": ["silver ingots", "ancient seal", "healing draught"]
+}

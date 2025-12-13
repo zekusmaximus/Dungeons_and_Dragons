@@ -1,0 +1,11 @@
+{
+  "archetype": "outlaw",
+  "motives": ["profit from the shadows", "evade capture", "settle a score"],
+  "skills": ["stealth", "ambush", "intimidation"],
+  "stat_block": {"ac": 14, "hp": 12, "attack": "+4 shortsword"},
+  "scene_prompts": [
+    "offers a risky partnership",
+    "tries to intimidate for protection money",
+    "reveals grudges against a faction"
+  ]
+}

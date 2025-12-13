@@ -1,0 +1,19 @@
+{
+  "mutation_rules": {
+    "truth_drift": "On a low deterministic roll (1-5 on mapped d20), reduce truth by one step; on 16-20, increase clarity by one step.",
+    "tone_hooks": "Rumors adopt the current tone dial adjectives when retold, affecting NPC reactions."
+  },
+  "spread_rules": {
+    "sources": ["tavern", "market", "temple", "campfire"],
+    "pace": "At the end of every scene, choose one source that heard the rumor; during downtime, two sources spread.",
+    "filters": [
+      "Factions with reputation +3 or higher boost spread for allied rumors",
+      "Clocks that are half full or more accelerate related rumor spread",
+      "Travel scenes spread rumors between hexes even without contact"
+    ]
+  },
+  "tracking": {
+    "log_tag": "[rumor:spread]",
+    "fields": ["who_shared", "who_heard", "tone", "entropy_index_used"]
+  }
+}

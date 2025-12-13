@@ -1,0 +1,11 @@
+{
+  "archetype": "commoner",
+  "motives": ["keep family safe", "earn honest pay", "avoid trouble"],
+  "skills": ["gossip", "barter"],
+  "stat_block": {"ac": 10, "hp": 4, "attack": "+1 club"},
+  "scene_prompts": [
+    "shares local rumors for kindness",
+    "asks for help hauling goods",
+    "warns about travel hazards"
+  ]
+}

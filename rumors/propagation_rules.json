@@ -1,0 +1,14 @@
+{
+  "steps": [
+    "Identify rumor relevance to current scene or downtime focus.",
+    "Use deterministic dice to determine clarity shift (1-5 obscures, 6-15 unchanged, 16-20 clarifies).",
+    "Select a new carrier NPC or location based on faction proximity and tone dial.",
+    "Log the spread with affected factions and any mutations."
+  ],
+  "truth_scale": ["false", "mostly_false", "partial", "mostly_true", "true"],
+  "scene_guidance": {
+    "investigation": "Offer rumor contradictions as clues.",
+    "social": "NPC attitudes shift one step toward rumor truth when persuasion succeeds.",
+    "horror": "Rumors grow darker adjectives and gain fear-driven distortions."
+  }
+}

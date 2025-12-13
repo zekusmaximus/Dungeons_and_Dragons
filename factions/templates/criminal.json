@@ -1,0 +1,11 @@
+{
+  "type": "criminal",
+  "common_traits": ["clandestine", "opportunistic", "code of silence"],
+  "default_reputation": -2,
+  "projects": ["secure smuggling routes", "neutralize informants", "launder profits"],
+  "sample_hooks": [
+    "A rival gang grabs territory; tensions rise.",
+    "A fence offers rare goods for a quiet favor.",
+    "The guild posts a bounty on an exposed spy."
+  ]
+}

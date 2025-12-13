@@ -1,0 +1,7 @@
+{
+  "activity": "business",
+  "requirements": ["downtime day", "10 gp seed capital"],
+  "resolution": "Roll deterministic profit: map d20 to earnings table; on low results pay expenses.",
+  "complications": ["tax collector visits", "supply disrupted", "rival undercuts prices"],
+  "log_tag": "[downtime:business]"
+}

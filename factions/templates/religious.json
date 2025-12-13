@@ -1,0 +1,11 @@
+{
+  "type": "religious",
+  "common_traits": ["ritual order", "communal aid", "symbolic gestures"],
+  "default_reputation": 1,
+  "projects": ["expand worship", "heal the sick", "safeguard relics"],
+  "sample_hooks": [
+    "A relic dims, demanding a quest of faith.",
+    "Pilgrims request escort through dangerous ground.",
+    "A schism brews over doctrine."
+  ]
+}

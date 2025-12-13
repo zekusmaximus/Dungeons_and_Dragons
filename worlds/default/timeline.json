@@ -1,0 +1,57 @@
+{
+  "events": [
+    {
+      "id": "t0-new-moon",
+      "time": "Day 0 - New Moon",
+      "description": "A courier from the Sunlit Assembly arrives with news of a spreading fever among pilgrims.",
+      "trigger": "campaign start",
+      "related_factions": ["sunlit-assembly"],
+      "clock_links": []
+    },
+    {
+      "id": "t1-lost-shipment",
+      "time": "Day 2",
+      "description": "Iron Syndicate loses an ingot shipment; suspicion falls on river smugglers.",
+      "trigger": "quest hook or rumor validation",
+      "related_factions": ["iron-syndicate", "shadow-cartel"],
+      "clock_links": ["iron-road-expansion"]
+    },
+    {
+      "id": "t2-blighted-grove",
+      "time": "Day 4",
+      "description": "Verdant Circle scouts spot black sap seeping near the old stones, marking the grove's decline.",
+      "trigger": "travel through forest or downtime research",
+      "related_factions": ["verdant-circle"],
+      "clock_links": ["circle-restoration"]
+    },
+    {
+      "id": "t3-pilgrim-candle",
+      "time": "Day 6",
+      "description": "Assembly lantern dims and casts two shadows, hinting at a rival faith's interference.",
+      "trigger": "visit to shrine or completion of an Assembly favor",
+      "related_factions": ["sunlit-assembly", "shadow-cartel"],
+      "clock_links": ["assembly-radiance", "cartel-lockdown"]
+    },
+    {
+      "id": "t4-rival-party",
+      "time": "Day 8",
+      "description": "A rival adventuring party claims to have solved the ingot theft; their story conflicts with known facts.",
+      "trigger": "when players ignore the docks for two scenes",
+      "related_factions": ["iron-syndicate"],
+      "clock_links": ["iron-road-expansion"]
+    },
+    {
+      "id": "t5-dawn-parley",
+      "time": "Day 10",
+      "description": "Representatives from all four factions meet at dawn to bargain; outcomes depend on reputation and clocks.",
+      "trigger": "after any clock fills or is reduced",
+      "related_factions": ["iron-syndicate", "verdant-circle", "sunlit-assembly", "shadow-cartel"],
+      "clock_links": ["iron-road-expansion", "circle-restoration", "assembly-radiance", "cartel-lockdown"]
+    }
+  ],
+  "advancement": {
+    "downtime": "Advance timeline by at least one event every two downtime scenes; log with [timeline:advance].",
+    "travel": "Long journeys that consume a full day advance to the next chronological event.",
+    "branching": "If events are skipped, mark them as delayed and adjust triggers rather than deleting them."
+  }
+}

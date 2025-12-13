@@ -1,0 +1,7 @@
+{
+  "activity": "influence",
+  "requirements": ["target faction", "downtime day", "leverage or favor"],
+  "resolution": "Roll deterministically to shift reputation by one step on success; failure risks ticking rival clocks.",
+  "complications": ["misread etiquette", "intercepted message", "counterinfluence"],
+  "log_tag": "[downtime:influence]"
+}

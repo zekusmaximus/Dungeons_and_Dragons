@@ -1,0 +1,10 @@
+{
+  "arc": "mystery",
+  "questions": [
+    "Who financed the rogue's initial training?",
+    "Why does the Assembly lantern dim when they pass?",
+    "What secret does the stolen ledger hide?"
+  ],
+  "progress": 0,
+  "notes": "Advance when clues are logged or revelations occur; sync with mysteries folder."
+}

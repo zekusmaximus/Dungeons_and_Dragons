@@ -1,0 +1,4 @@
+{
+  "scene_types": ["combat", "intrigue", "revelation", "horror", "chase", "negotiation"],
+  "usage": "Select a scene type before framing; pair with beats to pace tension."
+}

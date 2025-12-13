@@ -1,0 +1,10 @@
+{
+  "stances": [
+    {"name": "Aggressive", "ac_mod": -1, "attack_mod": +2, "skill_mod": 0, "initiative_mod": +1},
+    {"name": "Defensive", "ac_mod": +2, "attack_mod": -1, "skill_mod": 0, "initiative_mod": -1},
+    {"name": "Mobile", "ac_mod": 0, "attack_mod": 0, "skill_mod": +2, "initiative_mod": +2},
+    {"name": "Deceptive", "ac_mod": 0, "attack_mod": +1, "skill_mod": +1, "initiative_mod": 0},
+    {"name": "Analytical", "ac_mod": +1, "attack_mod": 0, "skill_mod": +2, "initiative_mod": -1}
+  ],
+  "usage": "Select at combat start; log choice with [stance:select] and adjust rolls accordingly."
+}

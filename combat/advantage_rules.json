@@ -1,0 +1,13 @@
+{
+  "environmental": [
+    "High ground grants +2 to ranged checks",
+    "Cover grants +2 AC but may reduce line of sight",
+    "Good lighting improves perception; darkness imposes disadvantage unless equipped"
+  ],
+  "situational": [
+    "Allies creating openings provide +1 to the next attack",
+    "Exploiting known weaknesses grants reroll once per scene",
+    "Using scene framing props can generate temporary edges"
+  ],
+  "tracking": "Record active advantages in sessions/<slug>/advantages.json and annotate entropy indices used to earn them."
+}
