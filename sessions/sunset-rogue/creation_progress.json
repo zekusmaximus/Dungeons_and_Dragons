@@ -74,6 +74,11 @@
                       "entropy_index":  null,
                       "id":  "background",
                       "value":  "Urchin"
+                  },
+                  {
+                      "entropy_index":  null,
+                      "id":  "name",
+                      "value":  "Shriveai"
                   }
               ],
     "slug":  "sunset-rogue",
