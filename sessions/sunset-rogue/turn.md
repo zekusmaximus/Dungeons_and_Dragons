@@ -1,2 +1,2 @@
-﻿DM: Race locked: Elf (+2 Dex, +1 Int, Darkvision, Keen Senses, Fey Ancestry).
-Question: Confirm class selection. Proceed with Rogue?
+﻿DM: Class locked: Rogue (d8 hit die, primary Dex, saves Dex/Int, features Sneak Attack and Expertise).
+Question: Ready to roll ability scores (4d6 drop lowest) using deterministic dice?
