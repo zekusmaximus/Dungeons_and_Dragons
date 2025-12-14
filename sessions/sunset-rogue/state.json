@@ -1,7 +1,7 @@
 ﻿{
     "character":  "sunset-rogue",
-    "turn":  1,
-    "scene_id":  "gate-stakeout",
+    "turn":  2,
+    "scene_id":  "postern-shadow",
     "location":  "CityGate",
     "hp":  11,
     "conditions":  [
@@ -9,9 +9,11 @@
                    ],
     "flags":  {
                   "gate_pattern":  "Shift change leaves ~30-second gap; two-guard patrol loop every few minutes",
-                  "postern_window":  "Side postern unlatched briefly when a runner passes from inner yard"
+                  "postern_window":  "Side postern unlatched briefly when a runner passes from inner yard",
+                  "postern_entry":  "Slipped in as runner unlatched; one guard glanced, mild suspicion",
+                  "cover":  "Crate stack just inside postern; muffled footsteps nearby"
               },
-    "log_index":  7,
+    "log_index":  8,
     "level":  1,
     "xp":  0,
     "inventory":  [
@@ -35,7 +37,7 @@
                 "r":  0,
                 "q":  0
             },
-    "time":  "2025-12-14T16:14:25.6500943-05:00",
+    "time":  "2025-12-14T16:25:08.0075221-05:00",
     "weather":  "clear",
     "travel_pace":  "normal",
     "exhaustion":  0,

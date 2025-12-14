@@ -6,3 +6,5 @@ Leather armor, Rapier, Shortbow (20 arrows), Thieves' tools, Dagger, Burglar's p
 
 Stakeout: Shriveai watches the gate as dusk deepens. Perception 23 (entropy 7).
 Findings: shift change creates a short gap; runner unlatches the postern; two-guard patrol cycles every few minutes.
+
+Infiltration: Shriveai times the runner and slips through the postern. Stealth 11 (entropy 8). A guard half-turns at a faint scrape, but the crate stack swallows her in shadow. Boots thump past; one lantern sweeps low.

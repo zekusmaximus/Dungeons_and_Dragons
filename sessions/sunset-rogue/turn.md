@@ -1,5 +1,6 @@
-﻿DM: Stakeout success. You spot a 30-second gap during the shift change and a runner who briefly unlatches the shadowed postern; two guards circle every few minutes.
+﻿DM: You slide through as the runner unlatches the postern. Stealth 11 (entropy 8). A guard half-turns at the sound, but you’re behind crates in deep shadow. Lantern light sweeps low; boots pass close.
 Choices:
-1) Slip through the postern on the next runner pass (Stealth).
-2) Create a distraction to widen the gap, then dart through.
-3) Trail the patrol to pickpocket a key or badge before entering.
+1) Stay frozen until the patrol clears, then move deeper.
+2) Toss a small pebble to redirect attention before slipping away.
+3) Shadow the patrol from behind the crates to tail them inside.
+4) Retreat quietly back out if the window stays open.
