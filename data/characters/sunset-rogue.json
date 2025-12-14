@@ -1,0 +1,74 @@
+﻿{
+    "slug":  "sunset-rogue",
+    "name":  "Shriveai",
+    "race":  "Elf",
+    "class":  "Rogue",
+    "background":  "Urchin",
+    "level":  1,
+    "hp":  11,
+    "ac":  15,
+    "abilities":  {
+                      "dex":  19,
+                      "wis":  15,
+                      "cha":  8,
+                      "con":  16,
+                      "str":  8,
+                      "int":  16
+                  },
+    "skills":  {
+                   "sleight_of_hand":  6,
+                   "perception":  4,
+                   "stealth":  6
+               },
+    "proficiencies":  {
+                          "tools":  [
+                                        "Disguise kit",
+                                        "Thieves\u0027 tools"
+                                    ],
+                          "skills":  [
+                                         "Sleight of Hand",
+                                         "Stealth",
+                                         "Perception"
+                                     ],
+                          "languages":  [
+                                            "Common",
+                                            "Elvish"
+                                        ]
+                      },
+    "inventory":  [
+                      "Leather armor",
+                      "Rapier",
+                      "Shortbow (20 arrows)",
+                      "Thieves\u0027 tools",
+                      "Dagger",
+                      "Burglar\u0027s pack",
+                      "Small knife",
+                      "Map of city",
+                      "Pet mouse",
+                      "Common clothes",
+                      "10 gp"
+                  ],
+    "starting_equipment":  [
+                               "Leather armor",
+                               "Rapier",
+                               "Shortbow (20 arrows)",
+                               "Thieves\u0027 tools",
+                               "Dagger",
+                               "Burglar\u0027s pack",
+                               "Small knife",
+                               "Map of city",
+                               "Pet mouse",
+                               "Common clothes",
+                               "10 gp"
+                           ],
+    "features":  [
+                     "Darkvision",
+                     "Keen Senses",
+                     "Fey Ancestry",
+                     "Sneak Attack",
+                     "Expertise",
+                     "City Secrets"
+                 ],
+    "notes":  "Elf rogue urchin tuned for stealth around the city gates at dusk.",
+    "creation_source":  "dm"
+}
