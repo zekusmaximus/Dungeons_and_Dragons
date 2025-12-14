@@ -69,6 +69,11 @@
                                                    },
                                     "notes":  "Elf modifiers applied (+2 Dex, +1 Int)"
                                 }
+                  },
+                  {
+                      "entropy_index":  null,
+                      "id":  "background",
+                      "value":  "Urchin"
                   }
               ],
     "slug":  "sunset-rogue",
