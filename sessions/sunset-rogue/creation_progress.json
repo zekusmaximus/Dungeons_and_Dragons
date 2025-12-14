@@ -79,6 +79,23 @@
                       "entropy_index":  null,
                       "id":  "name",
                       "value":  "Shriveai"
+                  },
+                  {
+                      "entropy_index":  null,
+                      "id":  "inventory",
+                      "value":  [
+                                    "Leather armor",
+                                    "Rapier",
+                                    "Shortbow (20 arrows)",
+                                    "Thieves\u0027 tools",
+                                    "Dagger",
+                                    "Burglar\u0027s pack",
+                                    "Small knife",
+                                    "Map of city",
+                                    "Pet mouse",
+                                    "Common clothes",
+                                    "10 gp"
+                                ]
                   }
               ],
     "slug":  "sunset-rogue",
