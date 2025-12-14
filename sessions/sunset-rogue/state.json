@@ -1,16 +1,17 @@
 ﻿{
     "character":  "sunset-rogue",
-    "turn":  0,
-    "scene_id":  "creation-complete",
+    "turn":  1,
+    "scene_id":  "gate-stakeout",
     "location":  "CityGate",
     "hp":  11,
     "conditions":  [
 
                    ],
     "flags":  {
-
+                  "gate_pattern":  "Shift change leaves ~30-second gap; two-guard patrol loop every few minutes",
+                  "postern_window":  "Side postern unlatched briefly when a runner passes from inner yard"
               },
-    "log_index":  6,
+    "log_index":  7,
     "level":  1,
     "xp":  0,
     "inventory":  [
@@ -34,7 +35,7 @@
                 "r":  0,
                 "q":  0
             },
-    "time":  "2025-12-14T16:04:40.8322277-05:00",
+    "time":  "2025-12-14T16:14:25.6500943-05:00",
     "weather":  "clear",
     "travel_pace":  "normal",
     "exhaustion":  0,

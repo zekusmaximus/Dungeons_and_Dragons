@@ -1,5 +1,5 @@
-﻿DM: Shriveai is ready. Dusk at the city gate—the guards change shifts and a side postern sits shadowed.
+﻿DM: Stakeout success. You spot a 30-second gap during the shift change and a runner who briefly unlatches the shadowed postern; two guards circle every few minutes.
 Choices:
-1) Blend with merchants and chat up a guard for gossip.
-2) Slip toward the shadowed side entrance using stealth.
-3) Stake out the gate a few minutes to spot patterns.
+1) Slip through the postern on the next runner pass (Stealth).
+2) Create a distraction to widen the gap, then dart through.
+3) Trail the patrol to pickpocket a key or badge before entering.
