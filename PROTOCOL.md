@@ -90,8 +90,21 @@ The DM MUST commit after each turn using the specified format, ensuring state, t
 ## Character Creation Mode
 - Detect creation requests in `sessions/<slug>/turn.md` that begin with "Start a new character".
 - Follow `character_creation/steps.json` sequentially, asking one clear question in `turn.md` after each completed step.
+- Whenever a step includes a choice (race, class, background, names, inventory branches, optional features), present the available options and wait for the player's explicit selection or consent to roll; never auto-pick or assume defaults.
 - Use deterministic dice from `dice/entropy.ndjson` for ability scores and any random tables, recording each `entropy_index` in `creation_progress.json` and `changelog.md`.
 - Persist interim choices in `sessions/<slug>/creation_progress.json` and delete the file once creation finalizes.
 - On finalize, create `data/characters/<slug>.json`, initialize `sessions/<slug>/state.json`, append a creation entry to `sessions/<slug>/changelog.md`, and seed `sessions/<slug>/transcript.md` with a creation summary.
 - Overwrite `turn.md` with the first adventure prompt, set `state.scene_id` to `creation-complete`, update `state.log_index` to the latest entropy index, and remove `LOCK`.
 - Commit every creation step with the `[character:create]` tag (e.g., `dm(<slug>): [character:create] step=abilities; details...`).
+
+## Level Up Mode
+- Trigger when `turn.md` requests a level advance or when XP in `state.json` reaches the threshold for the next level.
+- List all level-gated choices (class features, subclass picks, spells known/prepared, hit die roll vs fixed HP gain) and ask the player to pick each one; do not apply defaults without consent.
+- Use deterministic dice for any HP roll and log the `entropy_index`; if the player chooses fixed HP, note that choice instead.
+- Update both `data/characters/<slug>.json` and `sessions/<slug>/state.json` to reflect the new level, hit points, spell slots, and chosen features; cite sources in `changelog.md` and include a `[level-up]` tag in the commit summary.
+- After updating files, rewrite `turn.md` with a recap of the new abilities and a prompt for the next scene.
+
+## Rest Procedures
+- When a player requests a short or long rest, confirm the rest type and spell out any decisions needed (hit dice to spend, spell slots or abilities to recover, watch order); pause until the player provides those choices.
+- Apply healing, resource recovery, and condition clearance only after the choices are explicit; record any rolls with `entropy_index` values and summarize changes in `changelog.md`.
+- Update `state.json` to reflect the new HP, remaining hit dice, spell slots, conditions, and time passage; include `[rest:short]` or `[rest:long]` in the commit summary and end `turn.md` with a clear branch prompt.
