@@ -76,8 +76,11 @@ def load_state(settings: Settings, slug: str) -> Dict:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"State not found for '{slug}'"
         )
-    with state_path.open() as handle:
-        return json.load(handle)
+    with state_path.open(encoding='utf-8') as handle:
+        content = handle.read()
+    if content.startswith('\ufeff'):
+        content = content[1:]
+    return json.loads(content)
 
 
 def load_text_entries(path: Path, count: Optional[int] = None, cursor: Optional[str] = None) -> Tuple[List[Dict], Optional[str]]:
@@ -173,103 +176,128 @@ def load_world_file(world_path: Path, filename: str) -> Dict:
     if not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Missing world file {filename}")
     with path.open() as handle:
-        return json.load(handle)
+        data = json.load(handle)
+    return data
 
 
 def load_factions(settings: Settings, slug: str) -> Dict:
     world = resolve_world(settings, slug)
-    return load_world_file(world, "factions.json")
+    data = load_world_file(world, "factions.json")
+    factions = {f["id"]: f for f in data["factions"]}
+    return factions
 
 
 def save_faction(settings: Settings, slug: str, faction_id: str, faction_data: Dict):
     world = resolve_world(settings, slug)
-    factions = load_world_file(world, "factions.json")
-    factions[faction_id] = faction_data
+    data = load_world_file(world, "factions.json")
+    factions_dict = {f["id"]: f for f in data["factions"]}
+    factions_dict[faction_id] = faction_data
+    data["factions"] = list(factions_dict.values())
     factions_path = world / "factions.json"
     with factions_path.open('w') as handle:
-        json.dump(factions, handle, indent=2)
+        json.dump(data, handle, indent=2)
 
 
 def delete_faction(settings: Settings, slug: str, faction_id: str):
     world = resolve_world(settings, slug)
-    factions = load_world_file(world, "factions.json")
-    if faction_id in factions:
-        del factions[faction_id]
+    data = load_world_file(world, "factions.json")
+    factions_dict = {f["id"]: f for f in data["factions"]}
+    if faction_id in factions_dict:
+        del factions_dict[faction_id]
+        data["factions"] = list(factions_dict.values())
         factions_path = world / "factions.json"
         with factions_path.open('w') as handle:
-            json.dump(factions, handle, indent=2)
+            json.dump(data, handle, indent=2)
 
 
 def load_timeline(settings: Settings, slug: str) -> Dict:
     world = resolve_world(settings, slug)
-    return load_world_file(world, "timeline.json")
+    data = load_world_file(world, "timeline.json")
+    timeline = {e["id"]: e for e in data["events"]}
+    return timeline
 
 
 def save_timeline_event(settings: Settings, slug: str, event_id: str, event_data: Dict):
     world = resolve_world(settings, slug)
-    timeline = load_world_file(world, "timeline.json")
-    timeline[event_id] = event_data
+    data = load_world_file(world, "timeline.json")
+    events_dict = {e["id"]: e for e in data["events"]}
+    events_dict[event_id] = event_data
+    data["events"] = list(events_dict.values())
     timeline_path = world / "timeline.json"
     with timeline_path.open('w') as handle:
-        json.dump(timeline, handle, indent=2)
+        json.dump(data, handle, indent=2)
 
 
 def delete_timeline_event(settings: Settings, slug: str, event_id: str):
     world = resolve_world(settings, slug)
-    timeline = load_world_file(world, "timeline.json")
-    if event_id in timeline:
-        del timeline[event_id]
+    data = load_world_file(world, "timeline.json")
+    events_dict = {e["id"]: e for e in data["events"]}
+    if event_id in events_dict:
+        del events_dict[event_id]
+        data["events"] = list(events_dict.values())
         timeline_path = world / "timeline.json"
         with timeline_path.open('w') as handle:
-            json.dump(timeline, handle, indent=2)
+            json.dump(data, handle, indent=2)
 
 
 def load_rumors(settings: Settings, slug: str) -> Dict:
     world = resolve_world(settings, slug)
-    return load_world_file(world, "rumors.json")
+    data = load_world_file(world, "rumors.json")
+    rumors = {r["id"]: r for r in data["rumors"]}
+    return rumors
 
 
 def save_rumor(settings: Settings, slug: str, rumor_id: str, rumor_data: Dict):
     world = resolve_world(settings, slug)
-    rumors = load_world_file(world, "rumors.json")
-    rumors[rumor_id] = rumor_data
+    data = load_world_file(world, "rumors.json")
+    rumors_dict = {r["id"]: r for r in data["rumors"]}
+    rumors_dict[rumor_id] = rumor_data
+    data["rumors"] = list(rumors_dict.values())
     rumors_path = world / "rumors.json"
     with rumors_path.open('w') as handle:
-        json.dump(rumors, handle, indent=2)
+        json.dump(data, handle, indent=2)
 
 
 def delete_rumor(settings: Settings, slug: str, rumor_id: str):
     world = resolve_world(settings, slug)
-    rumors = load_world_file(world, "rumors.json")
-    if rumor_id in rumors:
-        del rumors[rumor_id]
+    data = load_world_file(world, "rumors.json")
+    rumors_dict = {r["id"]: r for r in data["rumors"]}
+    if rumor_id in rumors_dict:
+        del rumors_dict[rumor_id]
+        data["rumors"] = list(rumors_dict.values())
         rumors_path = world / "rumors.json"
         with rumors_path.open('w') as handle:
-            json.dump(rumors, handle, indent=2)
+            json.dump(data, handle, indent=2)
 
 
 def load_faction_clocks(settings: Settings, slug: str) -> Dict:
     world = resolve_world(settings, slug)
-    return load_world_file(world, "faction_clocks.json")
+    data = load_world_file(world, "faction_clocks.json")
+    clocks = {p["id"]: p for p in data["projects"]}
+    return clocks
 
 
 def save_faction_clock(settings: Settings, slug: str, clock_id: str, clock_data: Dict):
     world = resolve_world(settings, slug)
-    clocks = load_world_file(world, "faction_clocks.json")
-    clocks[clock_id] = clock_data
+    data = load_world_file(world, "faction_clocks.json")
+    clocks_dict = {p["id"]: p for p in data["projects"]}
+    clocks_dict[clock_id] = clock_data
+    data["projects"] = list(clocks_dict.values())
     clocks_path = world / "faction_clocks.json"
     with clocks_path.open('w') as handle:
-        json.dump(clocks, handle, indent=2)
+        json.dump(data, handle, indent=2)
 
 
 def delete_faction_clock(settings: Settings, slug: str, clock_id: str):
     world = resolve_world(settings, slug)
-    clocks = load_world_file(world, "faction_clocks.json")
-    if clock_id in clocks:
-        del clocks[clock_id]
+    data = load_world_file(world, "faction_clocks.json")
+    clocks_dict = {p["id"]: p for p in data["projects"]}
+    if clock_id in clocks_dict:
+        del clocks_dict[clock_id]
+        data["projects"] = list(clocks_dict.values())
         clocks_path = world / "faction_clocks.json"
         with clocks_path.open('w') as handle:
-            json.dump(clocks, handle, indent=2)
+            json.dump(data, handle, indent=2)
 
 
 def load_advantages(settings: Settings, slug: str) -> Dict:
@@ -399,8 +427,11 @@ def load_turn(settings: Settings, slug: str) -> str:
     turn_path = session_path / "turn.md"
     if not turn_path.exists():
         return ""
-    with turn_path.open() as handle:
-        return handle.read()
+    with turn_path.open(encoding='utf-8') as handle:
+        content = handle.read()
+    if content.startswith('\ufeff'):
+        content = content[1:]
+    return content
 
 
 def get_lock_info(settings: Settings, slug: str) -> Optional[LockInfo]:

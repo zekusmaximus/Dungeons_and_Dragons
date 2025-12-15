@@ -2,10 +2,10 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 interface SessionSummary {
-  slug: string;
-  world: string;
-  has_lock: boolean;
-  updated_at: number;
+   slug: string;
+   world: string;
+   has_lock: boolean;
+   updated_at: string;
 }
 
 const fetchSessions = async (): Promise<SessionSummary[]> => {
@@ -34,7 +34,7 @@ const Lobby: React.FC<LobbyProps> = ({ onSelectSession }) => {
         {sessions?.map((session) => (
           <li key={session.slug}>
             <button onClick={() => onSelectSession(session.slug)}>
-              {session.slug} - {session.world} {session.has_lock ? '(Locked)' : ''} - Updated: {new Date(session.updated_at * 1000).toLocaleString()}
+              {session.slug} - {session.world} {session.has_lock ? '(Locked)' : ''} - Updated: {new Date(session.updated_at).toLocaleString()}
             </button>
           </li>
         ))}
