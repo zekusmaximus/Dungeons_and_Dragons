@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -11,6 +12,13 @@ class Settings(BaseSettings):
     dice_file: str = "dice/entropy.ndjson"
     transcript_tail: int = 50
     changelog_tail: int = 50
+    
+    # LLM Configuration
+    llm_api_key: Optional[str] = None
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o"
+    llm_temperature: float = 0.7
+    llm_max_tokens: int = 500
 
     class Config:
         env_prefix = "DM_SERVICE_"
@@ -22,6 +30,10 @@ class Settings(BaseSettings):
     @property
     def dice_path(self) -> Path:
         return self.repo_root / self.dice_file
+
+    @property
+    def has_llm_config(self) -> bool:
+        return self.llm_api_key is not None and len(self.llm_api_key) > 0
 
 
 @lru_cache(maxsize=1)

@@ -9,9 +9,10 @@ import ExportBundle from './ExportBundle';
 
 interface DashboardProps {
   sessionSlug: string;
+  llmConfigUpdated?: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ sessionSlug }) => {
+const Dashboard: React.FC<DashboardProps> = ({ sessionSlug, llmConfigUpdated }) => {
   const [liveLockOwner, setLiveLockOwner] = useState<string | null>(null);
   const [liveTranscriptTail, setLiveTranscriptTail] = useState<string[]>([]);
 

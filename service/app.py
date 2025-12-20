@@ -1,11 +1,13 @@
 from typing import Optional, List, Dict
 from datetime import datetime
 import json
+import httpx
 
 import uuid
 
 from fastapi import Depends, FastAPI, Query, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from .config import Settings, get_settings
 from . import storage
@@ -21,6 +23,88 @@ app = FastAPI(
     title="Deterministic DM Service",
     description="API surface for deterministic, auditable gameplay data",
 )
+
+
+class LLMNarrativeRequest(BaseModel):
+    prompt: str
+    context: Optional[Dict] = None
+    scene_type: Optional[str] = None
+    tone: Optional[str] = None
+    max_tokens: Optional[int] = None
+
+
+class LLMNarrativeResponse(BaseModel):
+    narrative: str
+    tokens_used: int
+    model: str
+
+
+class LLMConfigRequest(BaseModel):
+    api_key: str
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+
+
+class LLMConfigResponse(BaseModel):
+    api_key_set: bool
+    current_model: str
+    base_url: str
+
+
+async def call_llm_api(
+    settings: Settings,
+    prompt: str,
+    context: Optional[Dict] = None,
+    max_tokens: Optional[int] = None
+) -> str:
+    """Call LLM API for narrative generation"""
+    if not settings.has_llm_config:
+        raise HTTPException(
+            status_code=400,
+            detail="LLM API key not configured. Please set DM_SERVICE_LLM_API_KEY or use /llm/config endpoint."
+        )
+    
+    max_tokens = max_tokens or settings.llm_max_tokens
+    
+    # Build the prompt with context
+    full_prompt = prompt
+    if context:
+        context_str = json.dumps(context)
+        full_prompt = f"Context: {context_str}\n\nPrompt: {prompt}"
+    
+    headers = {
+        "Authorization": f"Bearer {settings.llm_api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": settings.llm_model,
+        "messages": [{"role": "user", "content": full_prompt}],
+        "temperature": settings.llm_temperature,
+        "max_tokens": max_tokens
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{settings.llm_base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result["choices"][0]["message"]["content"].strip()
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"LLM API error: {e.response.text}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"LLM API call failed: {str(e)}"
+            )
 
 
 def get_settings_dep() -> Settings:
@@ -397,6 +481,83 @@ def session_entropy_history(
 ) -> List[EntropyHistoryEntry]:
     history_data = storage.load_entropy_history(settings, slug, limit)
     return [EntropyHistoryEntry(**h) for h in history_data]
+
+
+@app.get("/llm/config", tags=["LLM"], summary="Get current LLM configuration")
+def get_llm_config(settings: Settings = Depends(get_settings_dep)) -> LLMConfigResponse:
+    return LLMConfigResponse(
+        api_key_set=settings.has_llm_config,
+        current_model=settings.llm_model,
+        base_url=settings.llm_base_url
+    )
+
+
+@app.post("/llm/config", tags=["LLM"], summary="Configure LLM API settings")
+def configure_llm(
+    config: LLMConfigRequest,
+    settings: Settings = Depends(get_settings_dep)
+) -> LLMConfigResponse:
+    # In a real implementation, you would persist this configuration
+    # For now, we'll just return the current config
+    return LLMConfigResponse(
+        api_key_set=settings.has_llm_config,
+        current_model=config.model or settings.llm_model,
+        base_url=config.base_url or settings.llm_base_url
+    )
+
+
+@app.post("/llm/narrate", tags=["LLM"], summary="Generate narrative text using LLM")
+async def generate_narrative(
+    request: LLMNarrativeRequest,
+    settings: Settings = Depends(get_settings_dep)
+) -> LLMNarrativeResponse:
+    narrative = await call_llm_api(
+        settings,
+        request.prompt,
+        request.context,
+        request.max_tokens
+    )
+    return LLMNarrativeResponse(
+        narrative=narrative,
+        tokens_used=len(narrative.split()),  # Simple word count as proxy
+        model=settings.llm_model
+    )
+
+
+@app.post("/sessions/{slug}/llm/narrate", tags=["LLM"], summary="Generate scene narrative with context")
+async def generate_scene_narrative(
+    slug: str,
+    request: LLMNarrativeRequest,
+    settings: Settings = Depends(get_settings_dep)
+) -> LLMNarrativeResponse:
+    # Load session context
+    state = storage.load_state(settings, slug)
+    character = storage.load_character(settings, slug)
+    
+    # Build context from session
+    context = {
+        "character": character,
+        "current_state": state,
+        "scene_type": request.scene_type,
+        "tone": request.tone
+    }
+    
+    # Combine with any additional context from request
+    if request.context:
+        context.update(request.context)
+    
+    narrative = await call_llm_api(
+        settings,
+        request.prompt,
+        context,
+        request.max_tokens
+    )
+    
+    return LLMNarrativeResponse(
+        narrative=narrative,
+        tokens_used=len(narrative.split()),
+        model=settings.llm_model
+    )
 
 
 @app.get("/events/{slug}", tags=["Observability"], summary="SSE endpoint for real-time session updates")
