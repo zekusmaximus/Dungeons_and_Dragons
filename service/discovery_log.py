@@ -6,7 +6,7 @@ import json
 import random
 from pathlib import Path
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .llm_narrative import LLMNarrativeEnhancer, get_narrative_enhancer
 
@@ -45,11 +45,10 @@ class Discovery:
 class DiscoveryLog:
     """Manages the discovery log for a session"""
     
-    def __init__(self, session_slug: str):
+    def __init__(self, session_slug: str, repo_root: Optional[Path] = None):
         self.session_slug = session_slug
-        self.discovery_file = (
-            Path(__file__).resolve().parent.parent / "sessions" / session_slug / "discovery_log.json"
-        )
+        base_root = repo_root or Path(__file__).resolve().parent.parent
+        self.discovery_file = base_root / "sessions" / session_slug / "discovery_log.json"
         self.discoveries = []
         self._load_discoveries()
     
@@ -128,7 +127,7 @@ class DiscoveryLog:
     
     def generate_discovery_id(self) -> str:
         """Generate a unique discovery ID"""
-        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
         random_suffix = f"{random.randint(100, 999)}"
         return f"disc-{timestamp}-{random_suffix}"
     
@@ -171,7 +170,7 @@ Provide a more vivid, detailed description that captures the excitement and sign
                         rewards: List[str] = None) -> Discovery:
         """Create a new discovery entry"""
         discovery_id = self.generate_discovery_id()
-        discovered_at = datetime.utcnow().isoformat()
+        discovered_at = datetime.now(timezone.utc).isoformat()
         
         discovery = Discovery(
             discovery_id=discovery_id,
@@ -189,6 +188,6 @@ Provide a more vivid, detailed description that captures the excitement and sign
         return discovery
 
 
-def get_discovery_log(session_slug: str) -> DiscoveryLog:
+def get_discovery_log(session_slug: str, repo_root: Optional[Path] = None) -> DiscoveryLog:
     """Get the discovery log for a session"""
-    return DiscoveryLog(session_slug)
+    return DiscoveryLog(session_slug, repo_root)

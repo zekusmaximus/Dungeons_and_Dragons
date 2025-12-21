@@ -17,6 +17,7 @@ const NarrativeDashboard: React.FC<NarrativeDashboardProps> = ({ sessionSlug, on
   const [activeTab, setActiveTab] = useState<'journal' | 'adventure' | 'character' | 'settings' | 'map'>('adventure');
   const [showLLMConfig, setShowLLMConfig] = useState(false);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
+  const [discoveryStatus, setDiscoveryStatus] = useState<string | null>(null);
 
   const { data: sessionState, isLoading: isStateLoading } = useQuery({
     queryKey: ['state', sessionSlug],
@@ -65,6 +66,30 @@ const NarrativeDashboard: React.FC<NarrativeDashboardProps> = ({ sessionSlug, on
     // 3. Refresh the turn data
     
     console.log(`Quick action: ${action}`, message);
+  };
+
+  const handleDiscoveryQuickAction = async () => {
+    setDiscoveryStatus(null);
+    try {
+      const response = await fetch(`/api/sessions/${sessionSlug}/discoveries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `Rumor - Turn ${sessionState?.turn ?? ''}`.trim(),
+          discovery_type: 'rumor',
+          description: 'Quick discovery/rumor logged from the dashboard.',
+          location: sessionState?.location || 'Unknown',
+          importance: 1,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to add discovery');
+      }
+      setDiscoveryStatus('Discovery/Rumor added for this turn.');
+    } catch (err) {
+      console.error(err);
+      setDiscoveryStatus('Unable to add discovery. Try again after refreshing.');
+    }
   };
 
   // Extract character name and basic info
@@ -229,7 +254,17 @@ const NarrativeDashboard: React.FC<NarrativeDashboardProps> = ({ sessionSlug, on
                     >
                       🛌️ Rest
                     </button>
+                    <button
+                      onClick={handleDiscoveryQuickAction}
+                      className="action-button"
+                      title="Log a discovery or rumor"
+                    >
+                      🧭 Discovery
+                    </button>
                   </div>
+                  {discoveryStatus && (
+                    <div className="discovery-status">{discoveryStatus}</div>
+                  )}
 
                   {/* Turn Console */}
                   <div className="turn-console-section">
@@ -420,6 +455,11 @@ const dashboardCSS = `
   gap: 8px;
   margin-bottom: 15px;
   flex-wrap: wrap;
+}
+
+.discovery-status {
+  font-size: 12px;
+  color: #4a3728;
 }
 
 .action-button {

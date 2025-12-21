@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from http import HTTPStatus
 import json
 import re
@@ -17,8 +17,9 @@ from .models import (
     LockClaim, LockInfo, TurnResponse, PreviewRequest, PreviewResponse,
     FileDiff, EntropyPlan, CommitRequest, CommitResponse, SessionState,
     JobCreateRequest, JobResponse, JobProgress, JobCommitRequest,
-    CommitSummary, DiffResponse, EntropyHistoryEntry
+    CommitSummary, DiffResponse, EntropyHistoryEntry, CommitAndNarrateResponse, DMNarration, TurnRecord
 )
+from .narration import generate_dm_narration
 from .adventure_hooks import AdventureHooksService, get_adventure_hooks_service
 from .auto_save import AutoSaveSystem, get_auto_save_system
 from .discovery_log import DiscoveryLog, get_discovery_log, Discovery
@@ -371,6 +372,59 @@ def commit_turn(slug: str, request: CommitRequest, settings: Settings = Depends(
     return CommitResponse(state=session_state, log_indices=log_indices)
 
 
+@app.post("/sessions/{slug}/turn/commit-and-narrate")
+async def commit_and_narrate(
+    slug: str,
+    request: CommitRequest,
+    settings: Settings = Depends(get_settings_dep)
+) -> CommitAndNarrateResponse:
+    state_before = storage.load_state(settings, slug)
+    last_discovery_turn = storage.get_last_discovery_turn(settings, slug)
+    preview_data = storage.load_preview_metadata(settings, slug, request.preview_id)
+    state, log_indices = storage.commit_preview(settings, slug, request.preview_id, request.lock_owner)
+    session_state = SessionState(**state)
+    diff = storage.summarize_state_diff(state_before, state)
+    player_intent = preview_data.get("response", "")
+    include_discovery = last_discovery_turn is None or session_state.turn - last_discovery_turn > 2
+
+    dm_output, usage = await generate_dm_narration(
+        settings,
+        slug,
+        session_state.model_dump(mode="json"),
+        player_intent,
+        diff,
+        include_discovery=include_discovery,
+    )
+    if dm_output.discovery_added:
+        discovery_log = get_discovery_log(slug, settings.repo_root)
+        discovery_log.create_discovery(
+            name=dm_output.discovery_added.title,
+            discovery_type="rumor",
+            description=dm_output.discovery_added.text,
+            location=session_state.location,
+            importance=1,
+        )
+        storage.record_last_discovery_turn(settings, slug, session_state.turn)
+    consequence_echo = dm_output.narration.split(". ")[0] if dm_output.narration else "A new consequence unfolds."
+    record_payload = TurnRecord(
+        turn=session_state.turn,
+        player_intent=player_intent,
+        diff=diff,
+        consequence_echo=consequence_echo,
+        dm=dm_output,
+        created_at=datetime.now(timezone.utc),
+    ).model_dump(mode="json")
+    storage.persist_turn_record(settings, slug, record_payload)
+
+    response = CommitAndNarrateResponse(
+        commit=CommitResponse(state=session_state, log_indices=log_indices),
+        dm=dm_output,
+        turn_record=TurnRecord(**record_payload),
+        usage=usage,
+    )
+    return response
+
+
 @app.post("/jobs/explore")
 def create_explore_job(request: JobCreateRequest, settings: Settings = Depends(get_settings_dep)) -> JobResponse:
     raise HTTPException(status_code=501, detail="Job automation is disabled. Run the CLI tools directly under a session lock.")
@@ -431,10 +485,22 @@ def session_diff(
     from_commit: str = Query(..., description="From commit ID"),
     to: str = Query(..., description="To commit ID"),
     settings: Settings = Depends(get_settings_dep),
-) -> DiffResponse:
-    diffs = storage.load_session_diff(settings, slug, from_commit, to)
-    file_diffs = [FileDiff(path=d["path"], changes=d["changes"]) for d in diffs]
-    return DiffResponse(files=file_diffs)
+    ) -> DiffResponse:
+        diffs = storage.load_session_diff(settings, slug, from_commit, to)
+        file_diffs = [FileDiff(path=d["path"], changes=d["changes"]) for d in diffs]
+        return DiffResponse(files=file_diffs)
+
+
+@app.get("/sessions/{slug}/turns")
+def list_turn_records(slug: str, limit: int = Query(3, ge=1, le=25), settings: Settings = Depends(get_settings_dep)) -> List[TurnRecord]:
+    records = storage.load_turn_records(settings, slug, limit)
+    return [TurnRecord(**r) for r in records]
+
+
+@app.get("/sessions/{slug}/turns/{turn}")
+def get_turn_record(slug: str, turn: int, settings: Settings = Depends(get_settings_dep)) -> TurnRecord:
+    record = storage.load_turn_record(settings, slug, turn)
+    return TurnRecord(**record)
 
 
 @app.get("/sessions/{slug}/entropy/history", tags=["Observability"], summary="Get entropy usage history for a session")
@@ -904,45 +970,46 @@ class DiscoveryCreateRequest(BaseModel):
 
 
 @app.get("/sessions/{slug}/discoveries", tags=["Discoveries"], summary="Get all discoveries")
-def get_all_discoveries(slug: str):
+def get_all_discoveries(slug: str, settings: Settings = Depends(get_settings_dep)):
     """Get all discoveries for a session"""
-    discovery_log = get_discovery_log(slug)
+    discovery_log = get_discovery_log(slug, settings.repo_root)
     discoveries = discovery_log.get_all_discoveries()
     
     return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
 
 
 @app.get("/sessions/{slug}/discoveries/recent", tags=["Discoveries"], summary="Get recent discoveries")
-def get_recent_discoveries(slug: str, limit: int = Query(5, ge=1, le=20)):
+def get_recent_discoveries(slug: str, limit: int = Query(5, ge=1, le=20), settings: Settings = Depends(get_settings_dep)):
     """Get most recent discoveries"""
-    discovery_log = get_discovery_log(slug)
+    discovery_log = get_discovery_log(slug, settings.repo_root)
     discoveries = discovery_log.get_recent_discoveries(limit)
     
     return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
 
 
 @app.get("/sessions/{slug}/discoveries/important", tags=["Discoveries"], summary="Get important discoveries")
-def get_important_discoveries(slug: str, min_importance: int = Query(3, ge=1, le=5)):
+def get_important_discoveries(slug: str, min_importance: int = Query(3, ge=1, le=5), settings: Settings = Depends(get_settings_dep)):
     """Get important discoveries"""
-    discovery_log = get_discovery_log(slug)
+    discovery_log = get_discovery_log(slug, settings.repo_root)
     discoveries = discovery_log.get_important_discoveries(min_importance)
     
     return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
 
 
 @app.get("/sessions/{slug}/discoveries/types/{discovery_type}", tags=["Discoveries"], summary="Get discoveries by type")
-def get_discoveries_by_type(slug: str, discovery_type: str):
+def get_discoveries_by_type(slug: str, discovery_type: str, settings: Settings = Depends(get_settings_dep)):
     """Get discoveries filtered by type"""
-    discovery_log = get_discovery_log(slug)
+    discovery_log = get_discovery_log(slug, settings.repo_root)
     discoveries = discovery_log.get_discoveries_by_type(discovery_type)
     
     return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
 
 
 @app.post("/sessions/{slug}/discoveries", tags=["Discoveries"], summary="Log a new discovery")
-def log_discovery(slug: str, request: DiscoveryCreateRequest):
+def log_discovery(slug: str, request: DiscoveryCreateRequest, settings: Settings = Depends(get_settings_dep)):
     """Log a new discovery"""
-    discovery_log = get_discovery_log(slug)
+    discovery_log = get_discovery_log(slug, settings.repo_root)
+    state = storage.load_state(settings, slug)
     
     discovery = discovery_log.create_discovery(
         name=request.name,
@@ -953,23 +1020,23 @@ def log_discovery(slug: str, request: DiscoveryCreateRequest):
         related_quest=request.related_quest,
         rewards=request.rewards
     )
-    
+    storage.record_last_discovery_turn(settings, slug, state.get("turn", 0))
     return DiscoveryResponse(**discovery.to_dict())
 
 
 @app.get("/sessions/{slug}/discoveries/stats", tags=["Discoveries"], summary="Get discovery statistics")
-def get_discovery_stats(slug: str):
+def get_discovery_stats(slug: str, settings: Settings = Depends(get_settings_dep)):
     """Get statistics about discoveries"""
-    discovery_log = get_discovery_log(slug)
+    discovery_log = get_discovery_log(slug, settings.repo_root)
     stats = discovery_log.get_discovery_stats()
     
     return stats
 
 
 @app.post("/sessions/{slug}/discoveries/{discovery_id}/describe", tags=["Discoveries"], summary="Generate enhanced discovery description")
-async def generate_discovery_description(slug: str, discovery_id: str):
+async def generate_discovery_description(slug: str, discovery_id: str, settings: Settings = Depends(get_settings_dep)):
     """Generate an enhanced description for a discovery using LLM"""
-    discovery_log = get_discovery_log(slug)
+    discovery_log = get_discovery_log(slug, settings.repo_root)
     
     # Find the discovery
     discovery = None
@@ -1134,4 +1201,7 @@ def restore_save(slug: str, save_id: str, lock_owner: Optional[str] = None, sett
 @app.get("/events/{slug}", tags=["Observability"], summary="SSE endpoint for real-time session updates")
 def session_events(slug: str, settings: Settings = Depends(get_settings_dep)):
     """SSE endpoint is currently disabled pending deterministic event stream design."""
-    raise HTTPException(status_code=HTTPStatus.NOT_IMPLEMENTED, detail="Server-sent events are not available yet.")
+    raise HTTPException(
+        status_code=HTTPStatus.NOT_IMPLEMENTED,
+        detail="Server-sent events are not implemented. Use polling endpoints instead.",
+    )
