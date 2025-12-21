@@ -78,6 +78,12 @@ const TurnConsole: React.FC<TurnConsoleProps> = ({ sessionSlug }) => {
   const [dmOutput, setDmOutput] = useState<DMNarration | null>(null);
   const queryClient = useQueryClient();
 
+  const formatStakesSnippet = (stakes?: string) => {
+    if (!stakes) return null;
+    const snippet = stakes.split(/(?<=[.!?])\s/)[0] || stakes;
+    return snippet.length > 120 ? `${snippet.slice(0, 117)}...` : snippet;
+  };
+
   const { data: turnData, isLoading } = useQuery<TurnResponse>({
     queryKey: ['turn', sessionSlug],
     queryFn: () => fetch(`/api/sessions/${sessionSlug}/turn`).then(r => r.json()),
@@ -179,7 +185,30 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
     consequence_echo: lastConsequence || undefined,
     choices_fallback: true,
   };
+  const stakesSnippet = formatStakesSnippet(panelData.stakes);
+  const beatLocation = stateData?.location || 'the scene';
+  const beatGoal = stateData?.goal || stateData?.objective || 'press the advantage';
+  const beatThreat = stateData?.threat || stakesSnippet || 'unknown threat';
+  const pressureClockCount = Array.isArray((stateData as any)?.clocks) ? (stateData as any)?.clocks.length : (stateData as any)?.clocks_active;
+  const beatPressure = (stateData as any)?.pressure || (typeof pressureClockCount === 'number' ? `${pressureClockCount} clocks` : 'steady');
+  const beatHeader = `You are in ${beatLocation} / Goal ${beatGoal} / Threat ${beatThreat} / Pressure: ${beatPressure}`;
   const showFallbackBadge = needsChoiceFallback || panelData.choices_fallback;
+  const topDiff = lastDiff[0];
+  const outcomeLine = lastConsequence || topDiff ? `Outcome: ${lastConsequence || 'Turn saved.'}${topDiff ? ` • ${topDiff}` : ''}` : null;
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (!displayChoices.length) return;
+      if ((event.target as HTMLElement)?.tagName === 'TEXTAREA' || (event.target as HTMLElement)?.tagName === 'INPUT') return;
+      const choiceIndex = parseInt(event.key, 10) - 1;
+      if (choiceIndex >= 0 && choiceIndex < displayChoices.length) {
+        setResponse(displayChoices[choiceIndex].text);
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [displayChoices]);
 
   return (
     <div className="turn-console">
@@ -212,6 +241,7 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
                 <div className="dm-output__stakes">{panelData.stakes}</div>
               </div>
             </div>
+            <div className="dm-output__beat">{beatHeader}</div>
             <p className="dm-output__narration">{panelData.narration}</p>
             <div className="dm-output__recap"><strong>Recap:</strong> {panelData.recap}</div>
             {panelData.discovery_added && (
@@ -222,19 +252,25 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
               </div>
             )}
             <div className="dm-output__choices">
-              {displayChoices.map((choice) => (
+              {displayChoices.map((choice, index) => (
                 <button
                   key={choice.id}
                   className="choice-chip"
                   onClick={() => setResponse(choice.text)}
                   title={`${choice.intent_tag} • ${choice.risk} risk`}
                 >
-                  <span className="choice-id">{choice.id}</span>
+                  <div className="choice-chip__top">
+                    <span className="choice-key">{index + 1}</span>
+                    <span className="choice-intent">{choice.intent_tag}</span>
+                    <span className={`choice-risk choice-risk--${(choice.risk || '').toLowerCase()}`}>
+                      {choice.risk} risk
+                    </span>
+                  </div>
                   <span className="choice-text">{choice.text}</span>
-                  <span className="choice-meta">{choice.intent_tag} • {choice.risk} risk</span>
                 </button>
               ))}
             </div>
+            <div className="choice-hint">Press 1–4 to prefill a choice.</div>
           </div>
 
           <div className="guidance">
@@ -308,6 +344,10 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
                 </ul>
               )}
             </div>
+          )}
+
+          {outcomeLine && (
+            <div className="outcome-line">{outcomeLine}</div>
           )}
 
           {isLockedByOther && <div className="warning">Session is locked by another user. Actions disabled.</div>}
@@ -441,6 +481,15 @@ const turnConsoleCSS = `
   color: #5a4634;
 }
 
+.dm-output__beat {
+  margin: 6px 0 4px;
+  font-size: 13px;
+  padding: 6px 8px;
+  background: #f6eddd;
+  border: 1px dashed #d4b48d;
+  border-radius: 6px;
+}
+
 .dm-output__narration {
   margin: 6px 0;
   line-height: 1.5;
@@ -491,16 +540,66 @@ const turnConsoleCSS = `
   background: #fff;
 }
 
-.choice-id {
+.choice-chip__top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.choice-key {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #8B4513;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
   font-weight: 700;
-  margin-right: 6px;
+}
+
+.choice-intent {
+  font-weight: 700;
+  color: #4a3728;
+}
+
+.choice-risk {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #d4b48d;
+  background: #fffaf3;
+  text-transform: capitalize;
+}
+
+.choice-risk--high {
+  border-color: #b00020;
+  color: #b00020;
+  background: #ffe5e5;
+}
+
+.choice-risk--medium {
+  border-color: #c77d0a;
+  color: #8B4513;
+  background: #fff3d9;
+}
+
+.choice-risk--low {
+  border-color: #2f7a34;
+  color: #2f7a34;
+  background: #e9f6ea;
 }
 
 .choice-text {
   display: block;
+  font-size: 14px;
 }
 
-.choice-meta {
+.choice-hint {
+  margin-top: 4px;
   font-size: 12px;
   color: #5a4634;
 }
@@ -619,6 +718,16 @@ const turnConsoleCSS = `
 .consequence-title {
   font-weight: 700;
   margin-bottom: 4px;
+}
+
+.outcome-line {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d4b48d;
+  border-radius: 6px;
+  background: #fff;
+  font-weight: 600;
+  color: #4a3728;
 }
 
 .warning {
