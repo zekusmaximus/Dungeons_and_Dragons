@@ -18,6 +18,12 @@ from .models import (
     JobCreateRequest, JobResponse, JobProgress, JobCommitRequest,
     CommitSummary, DiffResponse, EntropyHistoryEntry, EventType, ServerSentEvent
 )
+from .adventure_hooks import AdventureHooksService, get_adventure_hooks_service
+from .auto_save import AutoSaveSystem, get_auto_save_system
+from .discovery_log import DiscoveryLog, get_discovery_log, Discovery
+from .mood_system import MoodSystem, get_mood_system, Mood
+from .npc_relationships import NPCRelationshipService, get_npc_relationship_service
+from quests.generator import generate_dynamic_quest
 
 app = FastAPI(
     title="Deterministic DM Service",
@@ -558,6 +564,694 @@ async def generate_scene_narrative(
         tokens_used=len(narrative.split()),
         model=settings.llm_model
     )
+
+
+# Adventure Hooks Endpoints
+class AdventureHookResponse(BaseModel):
+    hook_id: str
+    title: str
+    description: str
+    hook_type: str
+    location: str
+    difficulty: str
+    rewards: List[str]
+    starting_scene: str
+
+
+@app.get("/adventure-hooks", tags=["Adventure"], summary="Get all available adventure hooks")
+def get_adventure_hooks():
+    """Get all available adventure hooks for starting a new session"""
+    hooks_service = get_adventure_hooks_service()
+    hooks = hooks_service.get_available_hooks()
+    return [AdventureHookResponse(**hook.to_dict()) for hook in hooks]
+
+
+@app.get("/adventure-hooks/recommended", tags=["Adventure"], summary="Get recommended adventure hooks")
+def get_recommended_hooks(
+    character_class: Optional[str] = Query(None, description="Character class for recommendations"),
+    character_level: int = Query(1, ge=1, le=20, description="Character level")
+):
+    """Get adventure hooks recommended for a specific character"""
+    hooks_service = get_adventure_hooks_service()
+    hooks = hooks_service.get_recommended_hooks(character_class, character_level)
+    return [AdventureHookResponse(**hook.to_dict()) for hook in hooks]
+
+
+@app.get("/adventure-hooks/{hook_id}", tags=["Adventure"], summary="Get a specific adventure hook")
+def get_adventure_hook(hook_id: str):
+    """Get details for a specific adventure hook"""
+    hooks_service = get_adventure_hooks_service()
+    hook = hooks_service.get_hook_by_id(hook_id)
+    
+    if not hook:
+        raise HTTPException(status_code=404, detail="Adventure hook not found")
+    
+    return AdventureHookResponse(**hook.to_dict())
+
+
+@app.post("/adventure-hooks/generate", tags=["Adventure"], summary="Generate a custom adventure hook")
+async def generate_custom_hook(
+    character_context: Dict,
+    settings: Settings = Depends(get_settings_dep)
+):
+    """Generate a custom adventure hook using LLM based on character context"""
+    hooks_service = get_adventure_hooks_service()
+    
+    try:
+        hook = await hooks_service.generate_llm_enhanced_hook(character_context)
+        return AdventureHookResponse(**hook.to_dict())
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate custom hook: {str(e)}"
+        )
+
+
+# Dynamic Quest Generation Endpoints
+class QuestResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    objectives: List[str]
+    rewards: List[str]
+    difficulty: str
+    starting_scene: str
+    quest_type: str
+    character_name: Optional[str] = None
+    character_class: Optional[str] = None
+    character_level: Optional[int] = None
+    starting_location: Optional[str] = None
+
+
+@app.post("/quests/generate", tags=["Quests"], summary="Generate a dynamic quest")
+def generate_dynamic_quest_endpoint(
+    character_context: Dict,
+    session_context: Dict,
+    use_llm: bool = Query(False, description="Use LLM for enhanced quest generation")
+):
+    """Generate a dynamic quest based on character and session context"""
+    try:
+        quest = generate_dynamic_quest(character_context, session_context, use_llm)
+        return QuestResponse(**quest)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate quest: {str(e)}"
+        )
+
+
+@app.get("/quests/types", tags=["Quests"], summary="Get available quest types")
+def get_quest_types():
+    """Get information about different quest types"""
+    return {
+        "quest_types": {
+            "combat": "Focused on fighting and defeating enemies",
+            "stealth": "Requires sneaking, hiding, and subtle approaches",
+            "arcane": "Involves magic, puzzles, and mystical challenges",
+            "divine": "Centered around healing, blessings, and holy missions",
+            "exploration": "Focused on discovering new places and mapping unknown areas",
+            "social": "Involves interaction, diplomacy, and social challenges",
+            "training": "Personal growth and skill development quests",
+            "nature": "Connected to the natural world and its balance"
+        }
+    }
+
+
+# NPC Relationship Endpoints
+class NPCRelationshipResponse(BaseModel):
+    npc_id: str
+    name: str
+    relationship_status: str
+    attitude: str
+    relationship_level: int
+    trust: int
+    liking: int
+    fear: int
+    last_interaction: Optional[str] = None
+
+
+class RelationshipUpdateRequest(BaseModel):
+    interaction_type: str
+    success: bool
+    context: Dict
+
+
+@app.get("/sessions/{slug}/npcs/relationships", tags=["NPCs"], summary="Get all NPC relationships")
+def get_npc_relationships(slug: str):
+    """Get all NPC relationships for a session"""
+    relationship_service = get_npc_relationship_service(slug)
+    relationships = relationship_service.get_all_relationships()
+    
+    return [NPCRelationshipResponse(**rel.to_dict()) for rel in relationships]
+
+
+@app.get("/sessions/{slug}/npcs/{npc_id}/relationship", tags=["NPCs"], summary="Get relationship with specific NPC")
+def get_npc_relationship(slug: str, npc_id: str):
+    """Get relationship details for a specific NPC"""
+    relationship_service = get_npc_relationship_service(slug)
+    relationship = relationship_service.get_relationship(npc_id)
+    
+    if not relationship:
+        raise HTTPException(status_code=404, detail="NPC relationship not found")
+    
+    return NPCRelationshipResponse(**relationship.to_dict())
+
+
+@app.post("/sessions/{slug}/npcs/{npc_id}/relationship", tags=["NPCs"], summary="Update relationship with NPC")
+def update_npc_relationship(slug: str, npc_id: str, request: RelationshipUpdateRequest):
+    """Update relationship with an NPC based on interaction"""
+    relationship_service = get_npc_relationship_service(slug)
+    
+    # Get NPC name from context or use ID
+    npc_name = request.context.get('npc_name', npc_id)
+    
+    changes = relationship_service.update_relationship(
+        npc_id,
+        npc_name,
+        request.interaction_type,
+        request.success,
+        request.context
+    )
+    
+    return {
+        "message": "Relationship updated successfully",
+        "changes": changes
+    }
+
+
+@app.post("/sessions/{slug}/npcs/{npc_id}/dialogue", tags=["NPCs"], summary="Generate NPC dialogue")
+async def generate_npc_dialogue(slug: str, npc_id: str, context: Dict):
+    """Generate dialogue for an NPC based on current relationship"""
+    relationship_service = get_npc_relationship_service(slug)
+    
+    dialogue = await relationship_service.generate_relationship_dialogue(npc_id, context)
+    
+    if not dialogue:
+        raise HTTPException(status_code=404, detail="NPC not found or no dialogue available")
+    
+    return {"dialogue": dialogue}
+
+
+@app.get("/sessions/{slug}/npcs/relationship-summary", tags=["NPCs"], summary="Get relationship summary")
+def get_relationship_summary(slug: str):
+    """Get a summary of all NPC relationships"""
+    relationship_service = get_npc_relationship_service(slug)
+    relationships = relationship_service.get_all_relationships()
+    
+    summary = {
+        "total_npcs": len(relationships),
+        "relationships_by_status": {},
+        "average_relationship_level": 0,
+        "most_trusted_npc": None,
+        "most_liked_npc": None
+    }
+    
+    if relationships:
+        status_counts = {}
+        total_level = 0
+        
+        for rel in relationships:
+            status = rel.get_relationship_status()
+            status_counts[status] = status_counts.get(status, 0) + 1
+            total_level += rel.relationship_level
+        
+        summary["relationships_by_status"] = status_counts
+        summary["average_relationship_level"] = total_level / len(relationships)
+        
+        # Find most trusted and liked NPCs
+        most_trusted = max(relationships, key=lambda r: r.trust)
+        most_liked = max(relationships, key=lambda r: r.liking)
+        
+        summary["most_trusted_npc"] = {
+            "npc_id": most_trusted.npc_id,
+            "name": most_trusted.name,
+            "trust": most_trusted.trust
+        }
+        
+        summary["most_liked_npc"] = {
+            "npc_id": most_liked.npc_id,
+            "name": most_liked.name,
+            "liking": most_liked.liking
+        }
+    
+    return summary
+
+
+# Mood/Tone System Endpoints
+class MoodResponse(BaseModel):
+    current_mood: str
+    mood_intensity: float
+    mood_history: List[Dict]
+
+
+class MoodUpdateRequest(BaseModel):
+    mood: str
+    intensity: float = 1.0
+    reason: str = "Unknown"
+
+
+class MoodAdjustRequest(BaseModel):
+    mood_change: str
+    intensity_change: float = 0.0
+    reason: str = "Unknown"
+
+
+@app.get("/sessions/{slug}/mood", tags=["Mood"], summary="Get current mood state")
+def get_current_mood(slug: str):
+    """Get the current mood and tone settings"""
+    mood_system = get_mood_system(slug)
+    
+    return MoodResponse(
+        current_mood=mood_system.get_current_mood().value,
+        mood_intensity=mood_system.get_mood_intensity(),
+        mood_history=mood_system.get_mood_history()
+    )
+
+
+@app.post("/sessions/{slug}/mood", tags=["Mood"], summary="Set mood state")
+def set_mood_state(slug: str, request: MoodUpdateRequest):
+    """Set the current mood and intensity"""
+    mood_system = get_mood_system(slug)
+    
+    try:
+        mood = Mood(request.mood)
+        result = mood_system.set_mood(mood, request.intensity, request.reason)
+        
+        return {
+            "message": "Mood updated successfully",
+            "changes": result
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid mood: {request.mood}")
+
+
+@app.patch("/sessions/{slug}/mood", tags=["Mood"], summary="Adjust mood state")
+def adjust_mood_state(slug: str, request: MoodAdjustRequest):
+    """Adjust the current mood"""
+    mood_system = get_mood_system(slug)
+    
+    try:
+        mood_change = Mood(request.mood_change)
+        result = mood_system.adjust_mood(mood_change, request.intensity_change, request.reason)
+        
+        return {
+            "message": "Mood adjusted successfully",
+            "changes": result
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid mood change: {request.mood_change}")
+
+
+@app.get("/sessions/{slug}/mood/suggestions", tags=["Mood"], summary="Get mood suggestions")
+def get_mood_suggestions(slug: str):
+    """Get suggestions for the current mood"""
+    mood_system = get_mood_system(slug)
+    
+    return mood_system.get_mood_suggestions()
+
+
+@app.post("/sessions/{slug}/mood/narrate", tags=["Mood"], summary="Generate mood-enhanced narrative")
+async def generate_mood_narrative(slug: str, prompt: str, context: Dict = {}):
+    """Generate narrative enhanced with current mood"""
+    mood_system = get_mood_system(slug)
+    
+    narrative = await mood_system.generate_mood_enhanced_narrative(prompt, context)
+    
+    return {
+        "narrative": narrative,
+        "mood": mood_system.get_current_mood().value,
+        "intensity": mood_system.get_mood_intensity()
+    }
+
+
+@app.get("/mood/types", tags=["Mood"], summary="Get available mood types")
+def get_mood_types():
+    """Get information about different mood types"""
+    return {
+        "mood_types": {
+            "neutral": "Standard, balanced narrative tone",
+            "joyful": "Upbeat, happy, and positive tone",
+            "excited": "Energetic, thrilling, and dynamic tone",
+            "tense": "Anxious, suspenseful, and uncertain tone",
+            "dangerous": "Perilous, threatening, and urgent tone",
+            "mysterious": "Enigmatic, cryptic, and intriguing tone",
+            "peaceful": "Calm, serene, and relaxing tone",
+            "sad": "Melancholic, mournful, and somber tone",
+            "horrific": "Terrifying, gruesome, and disturbing tone",
+            "epic": "Heroic, grand, and monumental tone"
+        }
+    }
+
+
+# Discovery Log Endpoints
+class DiscoveryResponse(BaseModel):
+    discovery_id: str
+    name: str
+    discovery_type: str
+    description: str
+    location: str
+    discovered_at: str
+    importance: int
+    related_quest: Optional[str] = None
+    rewards: List[str] = []
+
+
+class DiscoveryCreateRequest(BaseModel):
+    name: str
+    discovery_type: str
+    description: str
+    location: str
+    importance: int = 1
+    related_quest: Optional[str] = None
+    rewards: List[str] = []
+
+
+@app.get("/sessions/{slug}/discoveries", tags=["Discoveries"], summary="Get all discoveries")
+def get_all_discoveries(slug: str):
+    """Get all discoveries for a session"""
+    discovery_log = get_discovery_log(slug)
+    discoveries = discovery_log.get_all_discoveries()
+    
+    return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
+
+
+@app.get("/sessions/{slug}/discoveries/recent", tags=["Discoveries"], summary="Get recent discoveries")
+def get_recent_discoveries(slug: str, limit: int = Query(5, ge=1, le=20)):
+    """Get most recent discoveries"""
+    discovery_log = get_discovery_log(slug)
+    discoveries = discovery_log.get_recent_discoveries(limit)
+    
+    return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
+
+
+@app.get("/sessions/{slug}/discoveries/important", tags=["Discoveries"], summary="Get important discoveries")
+def get_important_discoveries(slug: str, min_importance: int = Query(3, ge=1, le=5)):
+    """Get important discoveries"""
+    discovery_log = get_discovery_log(slug)
+    discoveries = discovery_log.get_important_discoveries(min_importance)
+    
+    return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
+
+
+@app.get("/sessions/{slug}/discoveries/types/{discovery_type}", tags=["Discoveries"], summary="Get discoveries by type")
+def get_discoveries_by_type(slug: str, discovery_type: str):
+    """Get discoveries filtered by type"""
+    discovery_log = get_discovery_log(slug)
+    discoveries = discovery_log.get_discoveries_by_type(discovery_type)
+    
+    return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
+
+
+@app.post("/sessions/{slug}/discoveries", tags=["Discoveries"], summary="Log a new discovery")
+def log_discovery(slug: str, request: DiscoveryCreateRequest):
+    """Log a new discovery"""
+    discovery_log = get_discovery_log(slug)
+    
+    discovery = discovery_log.create_discovery(
+        name=request.name,
+        discovery_type=request.discovery_type,
+        description=request.description,
+        location=request.location,
+        importance=request.importance,
+        related_quest=request.related_quest,
+        rewards=request.rewards
+    )
+    
+    return DiscoveryResponse(**discovery.to_dict())
+
+
+@app.get("/sessions/{slug}/discoveries/stats", tags=["Discoveries"], summary="Get discovery statistics")
+def get_discovery_stats(slug: str):
+    """Get statistics about discoveries"""
+    discovery_log = get_discovery_log(slug)
+    stats = discovery_log.get_discovery_stats()
+    
+    return stats
+
+
+@app.post("/sessions/{slug}/discoveries/{discovery_id}/describe", tags=["Discoveries"], summary="Generate enhanced discovery description")
+async def generate_discovery_description(slug: str, discovery_id: str):
+    """Generate an enhanced description for a discovery using LLM"""
+    discovery_log = get_discovery_log(slug)
+    
+    # Find the discovery
+    discovery = None
+    for disc in discovery_log.get_all_discoveries():
+        if disc.discovery_id == discovery_id:
+            discovery = disc
+            break
+    
+    if not discovery:
+        raise HTTPException(status_code=404, detail="Discovery not found")
+    
+    enhanced_description = await discovery_log.generate_discovery_description(discovery)
+    
+    return {
+        "discovery_id": discovery_id,
+        "original_description": discovery.description,
+        "enhanced_description": enhanced_description
+    }
+
+
+@app.get("/discoveries/types", tags=["Discoveries"], summary="Get available discovery types")
+def get_discovery_types():
+    """Get information about different discovery types"""
+    return {
+        "discovery_types": {
+            "location": "Discovery of new places and areas",
+            "creature": "Discovery of new creatures or beings",
+            "artifact": "Discovery of magical or historical artifacts",
+            "lore": "Discovery of ancient knowledge or secrets",
+            "resource": "Discovery of valuable resources or materials",
+            "phenomenon": "Discovery of strange or magical phenomena",
+            "civilization": "Discovery of lost civilizations or cultures",
+            "achievement": "Significant player achievements and milestones"
+        }
+    }
+
+
+# Auto-Save System Endpoints
+class SaveResponse(BaseModel):
+    save_id: str
+    session_slug: str
+    timestamp: str
+    save_type: str
+    saved_files: List[str]
+
+
+class AutoSaveStatusResponse(BaseModel):
+    running: bool
+    save_interval: int
+    last_save_time: float
+    save_count: int
+    next_save_in: float
+
+
+class ManualSaveRequest(BaseModel):
+    save_name: str = "manual"
+
+
+@app.get("/sessions/{slug}/auto-save/status", tags=["AutoSave"], summary="Get auto-save status")
+def get_auto_save_status(slug: str):
+    """Get current auto-save status"""
+    auto_save = get_auto_save_system(slug)
+    status = auto_save.get_auto_save_status()
+    
+    return AutoSaveStatusResponse(**status)
+
+
+@app.post("/sessions/{slug}/auto-save/start", tags=["AutoSave"], summary="Start auto-save")
+def start_auto_save(slug: str):
+    """Start the auto-save system"""
+    auto_save = get_auto_save_system(slug)
+    auto_save.start_auto_save()
+    
+    return {"message": "Auto-save started successfully"}
+
+
+@app.post("/sessions/{slug}/auto-save/stop", tags=["AutoSave"], summary="Stop auto-save")
+def stop_auto_save(slug: str):
+    """Stop the auto-save system"""
+    auto_save = get_auto_save_system(slug)
+    auto_save.stop_auto_save()
+    
+    return {"message": "Auto-save stopped successfully"}
+
+
+@app.post("/sessions/{slug}/auto-save/perform", tags=["AutoSave"], summary="Perform immediate auto-save")
+def perform_auto_save(slug: str):
+    """Perform an immediate auto-save"""
+    auto_save = get_auto_save_system(slug)
+    success = auto_save.perform_auto_save()
+    
+    if success:
+        return {"message": "Auto-save performed successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Auto-save failed")
+
+
+@app.post("/sessions/{slug}/save", tags=["AutoSave"], summary="Perform manual save")
+def manual_save(slug: str, request: ManualSaveRequest):
+    """Perform a manual save"""
+    auto_save = get_auto_save_system(slug)
+    result = auto_save.manual_save(request.save_name)
+    
+    if result['success']:
+        return {
+            "message": "Manual save performed successfully",
+            "save_id": result['save_id'],
+            "timestamp": result['timestamp']
+        }
+    else:
+        raise HTTPException(status_code=500, detail=f"Manual save failed: {result['error']}")
+
+
+@app.get("/sessions/{slug}/saves", tags=["AutoSave"], summary="Get save history")
+def get_save_history(slug: str, limit: int = Query(10, ge=1, le=50)):
+    """Get auto-save history"""
+    auto_save = get_auto_save_system(slug)
+    saves = auto_save.get_save_history(limit)
+    
+    return [SaveResponse(**save) for save in saves]
+
+
+@app.get("/sessions/{slug}/saves/{save_id}", tags=["AutoSave"], summary="Get save information")
+def get_save_info(slug: str, save_id: str):
+    """Get information about a specific save"""
+    auto_save = get_auto_save_system(slug)
+    save_info = auto_save.get_save_info(save_id)
+    
+    if not save_info:
+        raise HTTPException(status_code=404, detail="Save not found")
+    
+    return save_info
+
+
+@app.post("/sessions/{slug}/saves/{save_id}/restore", tags=["AutoSave"], summary="Restore a save")
+def restore_save(slug: str, save_id: str):
+    """Restore a save (placeholder - actual implementation would be more complex)"""
+    auto_save = get_auto_save_system(slug)
+    result = auto_save.restore_save(save_id)
+    
+    if result['success']:
+        return {
+            "message": "Save restoration initiated",
+            "note": result['message']
+        }
+    else:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {result['error']}")
+
+
+# Auto-Save System Endpoints
+class SaveResponse(BaseModel):
+    save_id: str
+    session_slug: str
+    timestamp: str
+    save_type: str
+    saved_files: List[str]
+
+
+class AutoSaveStatusResponse(BaseModel):
+    running: bool
+    save_interval: int
+    last_save_time: float
+    save_count: int
+    next_save_in: float
+
+
+class ManualSaveRequest(BaseModel):
+    save_name: str = "manual"
+
+
+@app.get("/sessions/{slug}/auto-save/status", tags=["AutoSave"], summary="Get auto-save status")
+def get_auto_save_status(slug: str):
+    """Get current auto-save status"""
+    auto_save = get_auto_save_system(slug)
+    status = auto_save.get_auto_save_status()
+    
+    return AutoSaveStatusResponse(**status)
+
+
+@app.post("/sessions/{slug}/auto-save/start", tags=["AutoSave"], summary="Start auto-save")
+def start_auto_save(slug: str):
+    """Start the auto-save system"""
+    auto_save = get_auto_save_system(slug)
+    auto_save.start_auto_save()
+    
+    return {"message": "Auto-save started successfully"}
+
+
+@app.post("/sessions/{slug}/auto-save/stop", tags=["AutoSave"], summary="Stop auto-save")
+def stop_auto_save(slug: str):
+    """Stop the auto-save system"""
+    auto_save = get_auto_save_system(slug)
+    auto_save.stop_auto_save()
+    
+    return {"message": "Auto-save stopped successfully"}
+
+
+@app.post("/sessions/{slug}/auto-save/perform", tags=["AutoSave"], summary="Perform immediate auto-save")
+def perform_auto_save(slug: str):
+    """Perform an immediate auto-save"""
+    auto_save = get_auto_save_system(slug)
+    success = auto_save.perform_auto_save()
+    
+    if success:
+        return {"message": "Auto-save performed successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Auto-save failed")
+
+
+@app.post("/sessions/{slug}/save", tags=["AutoSave"], summary="Perform manual save")
+def manual_save(slug: str, request: ManualSaveRequest):
+    """Perform a manual save"""
+    auto_save = get_auto_save_system(slug)
+    result = auto_save.manual_save(request.save_name)
+    
+    if result['success']:
+        return {
+            "message": "Manual save performed successfully",
+            "save_id": result['save_id'],
+            "timestamp": result['timestamp']
+        }
+    else:
+        raise HTTPException(status_code=500, detail=f"Manual save failed: {result['error']}")
+
+
+@app.get("/sessions/{slug}/saves", tags=["AutoSave"], summary="Get save history")
+def get_save_history(slug: str, limit: int = Query(10, ge=1, le=50)):
+    """Get auto-save history"""
+    auto_save = get_auto_save_system(slug)
+    saves = auto_save.get_save_history(limit)
+    
+    return [SaveResponse(**save) for save in saves]
+
+
+@app.get("/sessions/{slug}/saves/{save_id}", tags=["AutoSave"], summary="Get save information")
+def get_save_info(slug: str, save_id: str):
+    """Get information about a specific save"""
+    auto_save = get_auto_save_system(slug)
+    save_info = auto_save.get_save_info(save_id)
+    
+    if not save_info:
+        raise HTTPException(status_code=404, detail="Save not found")
+    
+    return save_info
+
+
+@app.post("/sessions/{slug}/saves/{save_id}/restore", tags=["AutoSave"], summary="Restore a save")
+def restore_save(slug: str, save_id: str):
+    """Restore a save (placeholder - actual implementation would be more complex)"""
+    auto_save = get_auto_save_system(slug)
+    result = auto_save.restore_save(save_id)
+    
+    if result['success']:
+        return {
+            "message": "Save restoration initiated",
+            "note": result['message']
+        }
+    else:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {result['error']}")
 
 
 @app.get("/events/{slug}", tags=["Observability"], summary="SSE endpoint for real-time session updates")
