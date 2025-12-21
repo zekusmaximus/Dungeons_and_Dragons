@@ -147,6 +147,32 @@ def create_session(settings: Settings, slug: str, template_slug: str = "example-
     return slug
 
 
+def load_character(settings: Settings, slug: str) -> Dict:
+    """Load a character sheet by slug from data/characters."""
+    if not _SLUG_PATTERN.match(slug):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid character slug. Use letters, numbers, hyphens, or underscores.",
+        )
+
+    character_path = settings.repo_root / "data" / "characters" / f"{slug}.json"
+    if not character_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Character '{slug}' not found",
+        )
+
+    try:
+        content = character_path.read_text(encoding="utf-8")
+        if content.startswith('\ufeff'):
+            content = content[1:]
+        return json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Invalid character data for '{slug}': {exc}",
+        )
+
 def load_state(settings: Settings, slug: str) -> Dict:
     session_path = _ensure_session(settings, slug)
     state_path = session_path / "state.json"

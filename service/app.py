@@ -124,6 +124,11 @@ def session_state(slug: str, settings: Settings = Depends(get_settings_dep)) -> 
     return storage.load_state(settings, slug)
 
 
+@app.get("/data/characters/{slug}.json")
+def character_data(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
+    return storage.load_character(settings, slug)
+
+
 @app.get("/sessions/{slug}/transcript")
 def session_transcript(
     slug: str,

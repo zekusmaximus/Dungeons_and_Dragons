@@ -389,7 +389,8 @@ const dashboardCSS = `
   gap: 20px;
   padding: 20px;
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .current-scene-panel {
@@ -494,7 +495,6 @@ const dashboardCSS = `
 
 .adventure-journal-section {
   height: 100%;
-  overflow: hidden;
 }
 
 .status-bar {
