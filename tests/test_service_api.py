@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 
 from service.app import app, get_settings_dep
 from service.config import Settings
+from service import app as app_module
+from service.models import DMChoice, DMNarration, RollRequest
 
 
 @pytest.fixture(scope="function")
@@ -217,3 +219,110 @@ def test_commit_job(client):
 def test_cancel_job(client):
     response = client.post("/jobs/any/cancel")
     assert response.status_code == 501
+
+
+def _character_payload():
+    return {
+        "name": "Player One",
+        "ancestry": "Human",
+        "class": "Fighter",
+        "background": "Soldier",
+        "level": 1,
+        "hp": 11,
+        "ac": 16,
+        "gp": 10,
+        "abilities": {"str": 15, "dex": 14, "con": 13, "int": 10, "wis": 12, "cha": 8},
+        "skills": ["athletics", "perception"],
+        "proficiencies": ["athletics", "perception"],
+        "tools": ["smith's tools"],
+        "languages": ["Common"],
+        "equipment": ["Chain mail", "Shield", "Longsword"],
+        "spells": [],
+        "notes": "Ready for battle",
+        "starting_location": "Town Gate",
+        "method": "standard-array",
+        "hook": "Urban mystery",
+    }
+
+
+def test_player_character_creation_and_bundle(client):
+    new_session = client.post("/sessions", json={"slug": "player-flow"}).json()["slug"]
+    response = client.post(f"/sessions/{new_session}/character", json=_character_payload())
+    assert response.status_code == 201
+    created = response.json()
+    assert created["character"]["name"] == "Player One"
+    assert created["state"]["hp"] == 11
+    assert created["state"]["ac"] == 18
+    assert created["state"]["abilities"]["str"] == 15
+
+    settings = app.dependency_overrides[get_settings_dep]()
+    session_character = settings.sessions_path / new_session / "character.json"
+    assert session_character.exists()
+
+    bundle = client.get(f"/sessions/{new_session}/player").json()
+    assert bundle["state"]["character"] == new_session
+    assert bundle["character"]["name"] == "Player One"
+    assert bundle["suggestions"]
+
+
+def test_opening_scene_with_hook(client):
+    slug = client.post("/sessions", json={"slug": "opening-scene"}).json()["slug"]
+    client.post(f"/sessions/{slug}/character", json=_character_payload())
+    response = client.post(f"/sessions/{slug}/player/opening", json={"hook": "Urban mystery"})
+    assert response.status_code == 200
+    data = response.json()
+    assert "narration" in data
+    assert "What do you do?" in data["narration"]["narration"]
+    assert len(data["narration"]["choices"]) >= 4
+    assert data["state"]["adventure_hook"]["label"] == "Urban mystery"
+
+
+def test_player_turn_endpoint(client):
+    slug = client.post("/sessions", json={"slug": "player-turn"}).json()["slug"]
+    client.post(f"/sessions/{slug}/character", json=_character_payload())
+    response = client.post(f"/sessions/{slug}/player/turn", json={"action": "I scout the area"})
+    assert response.status_code == 200
+    data = response.json()
+    assert "narration" in data
+    assert data["state"]["turn"] >= 1
+
+
+def test_player_roll_deterministic(client):
+    slug = client.post("/sessions", json={"slug": "roll-deterministic"}).json()["slug"]
+    response = client.post(
+        f"/sessions/{slug}/player/roll",
+        json={"type": "ability_check", "ability": "DEX"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == data["rolls"][0] + data["modifier"]
+    # First entropy line uses d20=12 and character dex modifier +3
+    assert data["total"] == 15
+
+
+def test_player_turn_includes_roll_request(monkeypatch, client):
+    slug = client.post("/sessions", json={"slug": "roll-request"}).json()["slug"]
+
+    async def fake_dm(settings, session_slug, state, before_state, player_intent, diff, include_discovery=False):
+        choices = [
+            DMChoice(id="A", text="Talk", intent_tag="talk", risk="low"),
+            DMChoice(id="B", text="Sneak", intent_tag="sneak", risk="medium"),
+            DMChoice(id="C", text="Fight", intent_tag="fight", risk="high"),
+            DMChoice(id="D", text="Investigate", intent_tag="investigate", risk="medium"),
+        ]
+        dm = DMNarration(
+            narration="Test scene. What do you do?",
+            recap="recap",
+            stakes="stakes",
+            choices=choices,
+            roll_request=RollRequest(type="ability_check", ability="DEX", skill="stealth", dc=12),
+        )
+        return dm, None
+
+    monkeypatch.setattr(app_module, "generate_dm_narration", fake_dm)
+
+    response = client.post(f"/sessions/{slug}/player/turn", json={"action": "I test"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["roll_request"]["type"] == "ability_check"
+    assert data["roll_request"]["ability"] == "DEX"

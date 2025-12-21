@@ -26,6 +26,11 @@ interface CharacterData {
   experience?: number;
   abilities?: AbilityScores;
   skills?: Record<string, number>;
+  proficiencies?: {
+    skills?: string[];
+    tools?: string[];
+    languages?: string[];
+  };
   inventory?: string[];
   equipment?: {
     weapon?: string;
@@ -161,16 +166,27 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             {/* Skills */}
             <div className="skills-section">
               <h3>Skills</h3>
-              <div className="skills-grid">
-                {Object.entries(character.skills || {}).map(([skill, bonus]) => (
-                  <div key={skill} className="skill-item">
-                    <span className="skill-name">{skill}</span>
-                    <span className="skill-bonus">
-                      {bonus >= 0 ? '+' : ''}{bonus ?? 0}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              {Object.entries(character.skills || {}).length > 0 ? (
+                <div className="skills-grid">
+                  {Object.entries(character.skills || {}).map(([skill, bonus]) => (
+                    <div key={skill} className="skill-item">
+                      <span className="skill-name">{skill}</span>
+                      <span className="skill-bonus">
+                        {bonus >= 0 ? '+' : ''}{bonus ?? 0}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="skills-grid">
+                  {(character.proficiencies?.skills || []).map((skill) => (
+                    <div key={skill} className="skill-item">
+                      <span className="skill-name">{skill}</span>
+                      <span className="skill-bonus">proficient</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Inventory */}

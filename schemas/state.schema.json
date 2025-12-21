@@ -56,6 +56,13 @@
       "type": "object",
       "additionalProperties": {"type": "object"}
     },
-    "gp": {"type": "integer", "minimum": 0}
+    "gp": {"type": "integer", "minimum": 0},
+    "adventure_hook": {
+      "type": "object",
+      "properties": {
+        "label": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
   }
 }

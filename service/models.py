@@ -14,6 +14,8 @@ class Abilities(BaseModel):
     wis: int
     cha: int
 
+    model_config = ConfigDict(populate_by_name=True)
+
 
 class Proficiencies(BaseModel):
     skills: List[str]
@@ -68,6 +70,11 @@ class SessionState(BaseModel):
     exhaustion: Optional[int] = Field(None, ge=0)
     quests: Optional[Dict[str, Any]] = None
     gp: Optional[int] = Field(None, ge=0)
+    ac: Optional[int] = Field(default=None, ge=1)
+    max_hp: Optional[int] = Field(default=None, ge=1)
+    spells: Optional[List[str]] = None
+    abilities: Optional[Abilities] = None
+    adventure_hook: Optional[Dict[str, str]] = None
 
 
 # Add more models as needed from other schemas
@@ -251,10 +258,11 @@ class DMNarration(BaseModel):
     narration: str
     recap: str
     stakes: str
-    choices: List[DMChoice] = Field(min_length=2, max_length=4)
+    choices: List[DMChoice] = Field(min_length=2, max_length=5)
     discovery_added: Optional[DiscoveryItem] = None
     consequence_echo: Optional[str] = None
     choices_fallback: bool = False
+    roll_request: Optional["RollRequest"] = None
 
 
 class TurnRecord(BaseModel):
@@ -271,3 +279,78 @@ class CommitAndNarrateResponse(BaseModel):
     dm: DMNarration
     turn_record: TurnRecord
     usage: Optional[Dict[str, int]] = None
+
+
+class CharacterCreationRequest(BaseModel):
+    name: str
+    ancestry: str
+    class_name: str = Field(alias="class")
+    background: str
+    level: int = Field(default=1, ge=1)
+    hp: int = Field(default=10, ge=1)
+    ac: int = Field(default=12, ge=1)
+    gp: int = Field(default=0, ge=0)
+    abilities: Abilities
+    skills: List[str] = Field(default_factory=list)
+    proficiencies: List[str] = Field(default_factory=list)
+    tools: List[str] = Field(default_factory=list)
+    languages: List[str] = Field(default_factory=list)
+    equipment: List[str] = Field(default_factory=list)
+    spells: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+    starting_location: Optional[str] = None
+    method: Optional[str] = None
+    hook: Optional[str] = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CharacterCreationResponse(BaseModel):
+    character: Dict[str, Any]
+    state: SessionState
+
+
+class PlayerBundleResponse(BaseModel):
+    state: SessionState
+    character: Dict[str, Any]
+    recaps: List[TurnRecord]
+    discoveries: List[Dict[str, Any]]
+    quests: Dict[str, Any]
+    suggestions: List[str]
+
+
+class PlayerTurnRequest(BaseModel):
+    action: str
+    state_patch: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OpeningSceneRequest(BaseModel):
+    hook: Optional[str] = None
+
+
+class PlayerTurnResponse(BaseModel):
+    state: SessionState
+    narration: DMNarration
+    turn_record: TurnRecord
+    suggestions: List[str]
+    roll_request: Optional["RollRequest"] = None
+
+
+class RollRequest(BaseModel):
+    type: Literal["ability_check", "saving_throw", "attack", "damage", "initiative"]
+    ability: Optional[Literal["STR", "DEX", "CON", "INT", "WIS", "CHA"]] = None
+    skill: Optional[str] = None
+    dc: Optional[int] = Field(default=None, ge=1)
+    advantage: Optional[Literal["advantage", "disadvantage", "normal"]] = "normal"
+    notes: Optional[str] = None
+
+
+class RollResult(BaseModel):
+    total: int
+    rolls: List[int]
+    modifier: int
+    label: str
+
+# Resolve forward references for nested models
+DMNarration.model_rebuild()
+PlayerTurnResponse.model_rebuild()

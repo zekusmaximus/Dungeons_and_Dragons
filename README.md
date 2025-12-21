@@ -28,6 +28,14 @@ This repository is a deterministic, file-backed solo D&D experience. A FastAPI b
    - Open **Settings → LLM Configuration** to POST `/api/llm/config` with your API key if you did not set an env var. Keys are stored locally in `.dm_llm_config.json` (git-ignored).
    - The UI reads `turn.md` and `state.json` from `sessions/example-rogue` and will use `/api/llm/narrate` for story beats once a key is present.
 
+## Player Mode Quickstart
+Player Mode is now the default landing page.
+1. Run the backend (`uvicorn service.app:app --reload --port 8000`) and the UI (`cd ui && npm run dev`).
+2. Open `http://localhost:5173` and choose **Start new adventure**. A fresh session is created from the template you enter (default `example-rogue`).
+3. The Character Wizard walks through concept, abilities (standard array by default; roll/point-buy optional), proficiencies, equipment, and review. Pick a starting hook on the final step. Submitting persists the hero to `sessions/<slug>/character.json`, updates session state, and triggers the opening scene.
+4. Play at the **Player Table**: free-text chat with the DM, suggestion buttons beneath the input, character sheet panel (AC/HP/stats/gear/spells), and a journal with quests, discoveries, and the latest recap.
+5. Need the deterministic controls? Click the small **Advanced** link to open the existing dashboard at `/advanced`.
+
 ## LLM configuration
 - Backend defaults are read from environment variables; POST `/api/llm/config` persists overrides to `.dm_llm_config.json` in the repo root (not committed).
 - The UI never echoes your key; it only reports whether one is configured and which base URL/model are active.

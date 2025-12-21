@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 import json
 import re
+import random
 
 import uuid
 
@@ -17,9 +18,12 @@ from .models import (
     LockClaim, LockInfo, TurnResponse, PreviewRequest, PreviewResponse,
     FileDiff, EntropyPlan, CommitRequest, CommitResponse, SessionState,
     JobCreateRequest, JobResponse, JobProgress, JobCommitRequest,
-    CommitSummary, DiffResponse, EntropyHistoryEntry, CommitAndNarrateResponse, DMNarration, TurnRecord
+    CommitSummary, DiffResponse, EntropyHistoryEntry, CommitAndNarrateResponse, DMNarration, TurnRecord,
+    CharacterCreationRequest, CharacterCreationResponse, PlayerBundleResponse, PlayerTurnRequest, PlayerTurnResponse,
+    OpeningSceneRequest,
+    RollRequest, RollResult
 )
-from .narration import generate_dm_narration
+from .narration import generate_dm_narration, generate_opening_narration
 from .adventure_hooks import AdventureHooksService, get_adventure_hooks_service
 from .auto_save import AutoSaveSystem, get_auto_save_system
 from .discovery_log import DiscoveryLog, get_discovery_log, Discovery
@@ -100,6 +104,92 @@ def list_sessions(settings: Settings = Depends(get_settings_dep)) -> List[Sessio
 def _slugify_seed(seed: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "-", seed).strip("-").lower()
     return cleaned or "adventure"
+
+
+HOOK_OPTIONS = [
+    "Classic dungeon",
+    "Urban mystery",
+    "Wilderness survival",
+    "Political intrigue",
+    "Horror",
+]
+
+_SKILL_TO_ABILITY = {
+    "athletics": "str",
+    "perception": "wis",
+    "survival": "wis",
+    "stealth": "dex",
+    "investigation": "int",
+    "persuasion": "cha",
+}
+
+_ARMOR_RULES = [
+    ("half plate", 15, 2),
+    ("chain mail", 16, 0),
+    ("chain shirt", 13, 2),
+    ("scale mail", 14, 2),
+    ("breastplate", 14, 2),
+    ("plate", 18, 0),
+    ("hide", 12, 2),
+    ("studded leather", 12, None),
+    ("leather", 11, None),
+    ("padded", 11, None),
+]
+
+
+def _ability_modifier(score: int) -> int:
+    return (score - 10) // 2
+
+
+def _proficiency_bonus(level: int) -> int:
+    return 2 + max(0, (level - 1) // 4)
+
+
+def _class_hit_die(class_name: str) -> int:
+    name = (class_name or "").strip().lower()
+    if name in {"barbarian"}:
+        return 12
+    if name in {"fighter", "paladin", "ranger"}:
+        return 10
+    if name in {"rogue", "bard", "cleric", "druid", "monk", "warlock"}:
+        return 8
+    if name in {"wizard", "sorcerer"}:
+        return 6
+    return 8
+
+
+def _compute_hp(level: int, hit_die: int, con_mod: int) -> int:
+    if level <= 1:
+        return max(1, hit_die + con_mod)
+    avg_per_level = (hit_die // 2) + 1
+    total = hit_die + con_mod + (level - 1) * (avg_per_level + con_mod)
+    return max(1, total)
+
+
+def _compute_ac(equipment: List[str], dex_mod: int) -> int:
+    lower_items = [item.lower() for item in equipment]
+    base_ac = 10
+    max_dex = None
+    for armor_name, armor_ac, armor_max_dex in _ARMOR_RULES:
+        if any(armor_name in item for item in lower_items):
+            base_ac = armor_ac
+            max_dex = armor_max_dex
+            break
+    dex_bonus = dex_mod if max_dex is None else min(dex_mod, max_dex)
+    shield_bonus = 2 if any("shield" in item for item in lower_items) else 0
+    return max(1, base_ac + dex_bonus + shield_bonus)
+
+
+def _normalize_hook_label(hook: Optional[str]) -> Optional[str]:
+    if not hook:
+        return None
+    cleaned = hook.strip()
+    if not cleaned:
+        return None
+    for option in HOOK_OPTIONS:
+        if cleaned.lower() == option.lower():
+            return option
+    return cleaned
 
 
 @app.post("/sessions", status_code=201)
@@ -377,11 +467,10 @@ def commit_turn(slug: str, request: CommitRequest, settings: Settings = Depends(
     return CommitResponse(state=session_state, log_indices=log_indices)
 
 
-@app.post("/sessions/{slug}/turn/commit-and-narrate")
-async def commit_and_narrate(
+async def _commit_and_narrate_internal(
+    settings: Settings,
     slug: str,
     request: CommitRequest,
-    settings: Settings = Depends(get_settings_dep)
 ) -> CommitAndNarrateResponse:
     state_before = storage.load_state(settings, slug)
     last_discovery_turn = storage.get_last_discovery_turn(settings, slug)
@@ -429,6 +518,317 @@ async def commit_and_narrate(
         usage=usage,
     )
     return response
+
+
+async def _commit_and_narrate_opening(
+    settings: Settings,
+    slug: str,
+    request: CommitRequest,
+    hook_label: Optional[str],
+    character: Optional[Dict],
+) -> CommitAndNarrateResponse:
+    state_before = storage.load_state(settings, slug)
+    last_discovery_turn = storage.get_last_discovery_turn(settings, slug)
+    preview_data = storage.load_preview_metadata(settings, slug, request.preview_id)
+    state, log_indices = storage.commit_preview(settings, slug, request.preview_id, request.lock_owner)
+    session_state = SessionState(**state)
+    diff = storage.summarize_state_diff(state_before, state)
+    player_intent = preview_data.get("response", "")
+    include_discovery = last_discovery_turn is None or session_state.turn - last_discovery_turn > 2
+
+    dm_output, usage = await generate_opening_narration(
+        settings,
+        slug,
+        session_state.model_dump(mode="json"),
+        state_before,
+        player_intent,
+        diff,
+        character,
+        hook_label,
+        include_discovery=include_discovery,
+    )
+    if dm_output.discovery_added:
+        discovery_log = get_discovery_log(slug, settings.repo_root)
+        discovery_log.create_discovery(
+            name=dm_output.discovery_added.title,
+            discovery_type="rumor",
+            description=dm_output.discovery_added.text,
+            location=session_state.location,
+            importance=1,
+        )
+        storage.record_last_discovery_turn(settings, slug, session_state.turn)
+    consequence_echo = dm_output.consequence_echo or "A new consequence unfolds."
+    record_payload = TurnRecord(
+        turn=session_state.turn,
+        player_intent=player_intent,
+        diff=diff,
+        consequence_echo=consequence_echo,
+        dm=dm_output,
+        created_at=datetime.now(timezone.utc),
+    ).model_dump(mode="json")
+    storage.persist_turn_record(settings, slug, record_payload)
+
+    response = CommitAndNarrateResponse(
+        commit=CommitResponse(state=session_state, log_indices=log_indices),
+        dm=dm_output,
+        turn_record=TurnRecord(**record_payload),
+        usage=usage,
+    )
+    return response
+
+
+@app.post("/sessions/{slug}/turn/commit-and-narrate")
+async def commit_and_narrate(
+    slug: str,
+    request: CommitRequest,
+    settings: Settings = Depends(get_settings_dep)
+) -> CommitAndNarrateResponse:
+    return await _commit_and_narrate_internal(settings, slug, request)
+
+
+@app.post("/sessions/{slug}/character", status_code=201)
+def create_character_for_session(
+    slug: str,
+    request: CharacterCreationRequest,
+    settings: Settings = Depends(get_settings_dep),
+) -> CharacterCreationResponse:
+    state = storage.load_state(settings, slug)
+    equipment = request.equipment or []
+    ability_scores = request.abilities.model_dump(by_alias=True)
+    dex_mod = _ability_modifier(request.abilities.dex)
+    con_mod = _ability_modifier(request.abilities.con)
+    hit_die = _class_hit_die(request.class_name)
+    derived_hp = _compute_hp(request.level, hit_die, con_mod)
+    derived_ac = _compute_ac(equipment, dex_mod)
+    prof_bonus = _proficiency_bonus(request.level)
+    skills_map = {}
+    for skill in request.skills or []:
+        skill_key = str(skill).lower().replace(" ", "_")
+        ability_key = _SKILL_TO_ABILITY.get(skill_key)
+        if not ability_key:
+            continue
+        ability_score = ability_scores.get(ability_key)
+        if ability_score is None:
+            continue
+        skills_map[skill_key] = _ability_modifier(ability_score) + prof_bonus
+    hook_label = _normalize_hook_label(request.hook)
+    character_payload = {
+        "slug": slug,
+        "name": request.name,
+        "race": request.ancestry,
+        "class": request.class_name,
+        "background": request.background,
+        "level": request.level,
+        "hp": derived_hp,
+        "ac": derived_ac,
+        "abilities": ability_scores,
+        "skills": skills_map,
+        "proficiencies": {
+          "skills": request.skills,
+          "tools": request.tools,
+          "languages": request.languages,
+        },
+        "inventory": equipment,
+        "starting_equipment": equipment,
+        "features": [],
+        "notes": request.notes or "",
+        "creation_source": "player",
+        "spells": request.spells,
+        "method": request.method,
+    }
+    saved_character = storage.save_character(settings, slug, character_payload, persist_to_data=True)
+
+    state["character"] = slug
+    state["hp"] = derived_hp
+    state["max_hp"] = derived_hp
+    state["level"] = request.level
+    state["inventory"] = equipment
+    state["gp"] = request.gp
+    if request.starting_location:
+        state["location"] = request.starting_location
+    state["ac"] = derived_ac
+    state["abilities"] = ability_scores
+    if request.spells:
+        state["spells"] = request.spells
+    if hook_label:
+        state["adventure_hook"] = {"label": hook_label}
+    if not state.get("conditions"):
+        state["conditions"] = []
+    if not state.get("flags"):
+        state["flags"] = {}
+    updated_state = storage.save_state(settings, slug, state)
+    return CharacterCreationResponse(character=saved_character, state=updated_state)
+
+
+@app.get("/sessions/{slug}/player")
+def get_player_bundle(slug: str, settings: Settings = Depends(get_settings_dep)) -> PlayerBundleResponse:
+    state = SessionState(**storage.load_state(settings, slug))
+    try:
+        character = storage.load_character(settings, slug)
+    except HTTPException:
+        character = {}
+    recaps_raw = storage.load_turn_records(settings, slug, limit=3)
+    recaps = [TurnRecord(**r) for r in recaps_raw]
+    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discoveries = [d.to_dict() for d in discovery_log.get_recent_discoveries(5)]
+    quests = storage.load_quests(settings, slug)
+    suggestions: List[str] = []
+    if recaps and recaps[0].dm and recaps[0].dm.choices:
+        suggestions = [choice.text for choice in recaps[0].dm.choices if choice.text][:5]
+    if not suggestions:
+        suggestions = [
+            "Survey the area for clues",
+            "Talk to someone nearby",
+            "Check your gear and supplies",
+            "Look for a safe path forward",
+            "Take a breather and plan",
+        ]
+    return PlayerBundleResponse(
+        state=state,
+        character=character,
+        recaps=recaps,
+        discoveries=discoveries,
+        quests=quests,
+        suggestions=suggestions[:5],
+    )
+
+
+@app.post("/sessions/{slug}/player/opening")
+async def player_opening_scene(
+    slug: str,
+    request: OpeningSceneRequest,
+    settings: Settings = Depends(get_settings_dep),
+) -> PlayerTurnResponse:
+    owner = "player-ui"
+    claimed_here = False
+    lock_info = storage.get_lock_info(settings, slug)
+    if lock_info and lock_info.owner != owner:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail="Session is busy right now. Try again in a moment.")
+    if lock_info is None:
+        storage.claim_lock(settings, slug, owner, ttl=300)
+        claimed_here = True
+    try:
+        state = storage.load_state(settings, slug)
+        try:
+            character = storage.load_character(settings, slug)
+        except HTTPException:
+            character = {}
+        hook_label = _normalize_hook_label(request.hook)
+        existing_hook = state.get("adventure_hook", {})
+        if not hook_label:
+            if isinstance(existing_hook, dict):
+                hook_label = existing_hook.get("label")
+        if not hook_label:
+            hook_label = random.choice(HOOK_OPTIONS)
+        state_patch = {}
+        if hook_label:
+            existing_label = existing_hook.get("label") if isinstance(existing_hook, dict) else None
+            if existing_label != hook_label:
+                state_patch["adventure_hook"] = {"label": hook_label}
+
+        preview_id, _, _ = storage.create_preview(
+            settings,
+            slug,
+            PreviewRequest(
+                response="Opening scene",
+                state_patch=state_patch,
+                transcript_entry=f"Adventure hook: {hook_label}" if hook_label else "Adventure begins.",
+                lock_owner=owner,
+            ),
+        )
+        commit_request = CommitRequest(preview_id=preview_id, lock_owner=owner)
+        result = await _commit_and_narrate_opening(settings, slug, commit_request, hook_label, character)
+    finally:
+        if claimed_here:
+            storage.release_lock(settings, slug)
+
+    suggestions = [choice.text for choice in result.dm.choices if choice and getattr(choice, "text", None)] if result.dm.choices else []
+    if len(suggestions) < 4:
+        fallback = [
+            "Probe the surroundings",
+            "Strike up a conversation",
+            "Prepare for trouble",
+            "Take stock of your gear",
+            "Move cautiously ahead",
+        ]
+        for idea in fallback:
+            if idea not in suggestions:
+                suggestions.append(idea)
+            if len(suggestions) >= 5:
+                break
+    return PlayerTurnResponse(
+        state=result.commit.state,
+        narration=result.dm,
+        turn_record=result.turn_record,
+        suggestions=suggestions[:5],
+        roll_request=result.dm.roll_request,
+    )
+
+
+@app.post("/sessions/{slug}/player/roll")
+def player_roll(slug: str, request: RollRequest, settings: Settings = Depends(get_settings_dep)) -> RollResult:
+    try:
+        return storage.perform_roll(settings, slug, request)
+    except HTTPException as exc:
+        if exc.status_code >= 500:
+            raise exc
+        raise HTTPException(status_code=exc.status_code, detail="The DM couldn't respond. Check your LLM settings.") from exc
+    except Exception:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="The DM couldn't respond. Check your LLM settings.")
+
+
+@app.post("/sessions/{slug}/player/turn")
+async def player_turn(
+    slug: str,
+    request: PlayerTurnRequest,
+    settings: Settings = Depends(get_settings_dep),
+) -> PlayerTurnResponse:
+    owner = "player-ui"
+    claimed_here = False
+    lock_info = storage.get_lock_info(settings, slug)
+    if lock_info and lock_info.owner != owner:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail="Session is busy right now. Try again in a moment.")
+    if lock_info is None:
+        storage.claim_lock(settings, slug, owner, ttl=300)
+        claimed_here = True
+    try:
+        preview_id, _, _ = storage.create_preview(
+            settings,
+            slug,
+            PreviewRequest(
+                response=request.action,
+                state_patch=request.state_patch,
+                transcript_entry=request.action,
+                lock_owner=owner,
+            ),
+        )
+        commit_request = CommitRequest(preview_id=preview_id, lock_owner=owner)
+        result = await _commit_and_narrate_internal(settings, slug, commit_request)
+    finally:
+        if claimed_here:
+            storage.release_lock(settings, slug)
+
+    suggestions = [choice.text for choice in result.dm.choices if choice and getattr(choice, "text", None)] if result.dm.choices else []
+    if len(suggestions) < 4:
+        fallback = [
+            "Probe the surroundings",
+            "Strike up a conversation",
+            "Prepare for trouble",
+            "Take stock of your gear",
+            "Move cautiously ahead",
+        ]
+        for idea in fallback:
+            if idea not in suggestions:
+                suggestions.append(idea)
+            if len(suggestions) >= 5:
+                break
+    return PlayerTurnResponse(
+        state=result.commit.state,
+        narration=result.dm,
+        turn_record=result.turn_record,
+        suggestions=suggestions[:5],
+        roll_request=result.dm.roll_request,
+    )
 
 
 @app.post("/jobs/explore")

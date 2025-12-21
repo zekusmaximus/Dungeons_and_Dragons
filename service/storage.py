@@ -16,7 +16,7 @@ from fastapi import HTTPException, status
 from pydantic import ValidationError
 
 from .config import Settings
-from .models import LockInfo, JobCreateRequest, JobStatus, SessionState, PreviewRequest
+from .models import LockInfo, JobCreateRequest, JobStatus, SessionState, PreviewRequest, RollRequest, RollResult
 
 _SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 _PREVIEWS_DIRNAME = "previews"
@@ -135,12 +135,10 @@ def create_session(settings: Settings, slug: str, template_slug: str = "example-
     )
 
     template_character = settings.repo_root / "data" / "characters" / f"{template_slug}.json"
-    destination_character = settings.repo_root / "data" / "characters" / f"{slug}.json"
     if template_character.exists():
         try:
             character_data = json.loads(template_character.read_text(encoding="utf-8"))
-            character_data["slug"] = slug
-            destination_character.write_text(json.dumps(character_data, indent=2), encoding="utf-8")
+            save_character(settings, slug, character_data, persist_to_data=True)
         except Exception:
             pass
 
@@ -148,22 +146,29 @@ def create_session(settings: Settings, slug: str, template_slug: str = "example-
 
 
 def load_character(settings: Settings, slug: str) -> Dict:
-    """Load a character sheet by slug from data/characters."""
+    """Load a character sheet by slug. Prefer session-local copy, fall back to data/characters."""
     if not _SLUG_PATTERN.match(slug):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid character slug. Use letters, numbers, hyphens, or underscores.",
         )
 
+    session_path = settings.sessions_path / slug
+    session_character = session_path / "character.json"
     character_path = settings.repo_root / "data" / "characters" / f"{slug}.json"
-    if not character_path.exists():
+
+    if session_character.exists():
+        target = session_character
+    elif character_path.exists():
+        target = character_path
+    else:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Character '{slug}' not found",
         )
 
     try:
-        content = character_path.read_text(encoding="utf-8")
+        content = target.read_text(encoding="utf-8")
         if content.startswith('\ufeff'):
             content = content[1:]
         return json.loads(content)
@@ -172,6 +177,30 @@ def load_character(settings: Settings, slug: str) -> Dict:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Invalid character data for '{slug}': {exc}",
         )
+
+
+def save_character(settings: Settings, slug: str, character_data: Dict, persist_to_data: bool = True) -> Dict:
+    """Persist a character JSON to the session and optionally the shared data directory."""
+    if not _SLUG_PATTERN.match(slug):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid character slug. Use letters, numbers, hyphens, or underscores.",
+        )
+
+    payload = deepcopy(character_data)
+    payload["slug"] = slug
+
+    session_path = _ensure_session(settings, slug)
+    session_character = session_path / "character.json"
+    session_character.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    if persist_to_data:
+        characters_dir = settings.repo_root / "data" / "characters"
+        characters_dir.mkdir(parents=True, exist_ok=True)
+        data_character = characters_dir / f"{slug}.json"
+        data_character.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    return payload
 
 def load_state(settings: Settings, slug: str) -> Dict:
     session_path = _ensure_session(settings, slug)
@@ -195,6 +224,15 @@ def _validate_state(state: Dict) -> SessionState:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"State validation failed: {exc}",
         )
+
+
+def save_state(settings: Settings, slug: str, state: Dict) -> SessionState:
+    """Validate and persist session state."""
+    session_path = _ensure_session(settings, slug)
+    validated = _validate_state(state)
+    state_path = session_path / "state.json"
+    state_path.write_text(json.dumps(validated.model_dump(mode="json"), indent=2), encoding="utf-8")
+    return validated
 
 
 def load_text_entries(path: Path, count: Optional[int] = None, cursor: Optional[str] = None) -> Tuple[List[Dict], Optional[str]]:
@@ -626,6 +664,80 @@ def _ensure_entropy_available(settings: Settings, target_index: int):
     )
 
 
+def _load_entropy_entry(settings: Settings, index: int) -> Dict:
+    """Load a specific entropy entry by index."""
+    with settings.dice_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if data.get("i") == index:
+                return data
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Not enough entropy for the requested roll",
+    )
+
+
+def _ability_score_from_payload(payload: Dict, ability: str) -> Optional[int]:
+    abilities = payload.get("abilities") or {}
+    if not isinstance(abilities, dict):
+        return None
+    lower = ability.lower()
+    return (
+        abilities.get(lower)
+        or abilities.get(f"{lower}_")
+        or abilities.get(lower.upper())
+        or abilities.get(ability)
+    )
+
+
+def _ability_modifier(score: Optional[int]) -> int:
+    if score is None:
+        return 0
+    return (score - 10) // 2
+
+
+def perform_roll(settings: Settings, slug: str, roll_request: RollRequest) -> RollResult:
+    state = load_state(settings, slug)
+    character = {}
+    try:
+        character = load_character(settings, slug)
+    except HTTPException:
+        pass
+
+    next_index = state.get("log_index", 0) + 1
+    _ensure_entropy_available(settings, next_index)
+    entropy_entry = _load_entropy_entry(settings, next_index)
+
+    d20_values = entropy_entry.get("d20") or []
+    needed = 2 if roll_request.advantage in ("advantage", "disadvantage") else 1
+    if len(d20_values) < needed:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Entropy line missing dice values")
+
+    used_rolls = d20_values[:needed]
+    base_roll = max(used_rolls) if roll_request.advantage == "advantage" else min(used_rolls) if roll_request.advantage == "disadvantage" else used_rolls[0]
+
+    modifier = 0
+    label = roll_request.skill or roll_request.ability or roll_request.type
+    if roll_request.skill and isinstance(character.get("skills"), dict):
+        skill_key = roll_request.skill.lower().replace(" ", "_")
+        skill_bonus = character["skills"].get(skill_key)
+        if isinstance(skill_bonus, (int, float)):
+            modifier = int(skill_bonus)
+    if modifier == 0 and roll_request.ability:
+        ability_score = _ability_score_from_payload(state, roll_request.ability) or _ability_score_from_payload(character, roll_request.ability)
+        modifier = _ability_modifier(ability_score)
+        label = f"{label} ({roll_request.ability})" if label else roll_request.ability
+
+    total = base_roll + modifier
+
+    state["log_index"] = next_index
+    save_state(settings, slug, state)
+
+    display_label = label or roll_request.type
+    return RollResult(total=total, rolls=used_rolls, modifier=modifier, label=str(display_label))
 def _apply_state_patch(state: Dict, patch: Dict) -> Dict:
     allowed_fields = set(SessionState.model_fields.keys())
     disallowed = {"turn", "log_index"}
