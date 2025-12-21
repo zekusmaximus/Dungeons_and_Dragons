@@ -391,6 +391,7 @@ async def commit_and_narrate(
         settings,
         slug,
         session_state.model_dump(mode="json"),
+        state_before,
         player_intent,
         diff,
         include_discovery=include_discovery,
@@ -405,7 +406,7 @@ async def commit_and_narrate(
             importance=1,
         )
         storage.record_last_discovery_turn(settings, slug, session_state.turn)
-    consequence_echo = dm_output.narration.split(". ")[0] if dm_output.narration else "A new consequence unfolds."
+    consequence_echo = dm_output.consequence_echo or "A new consequence unfolds."
     record_payload = TurnRecord(
         turn=session_state.turn,
         player_intent=player_intent,
