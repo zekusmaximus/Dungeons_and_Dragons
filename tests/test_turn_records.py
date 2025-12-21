@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import shutil
 
 import pytest
@@ -71,3 +72,27 @@ def test_dm_validation_fallback(client_with_root, monkeypatch):
     dm = data["dm"]
     assert dm["choices"]
     assert data["usage"] == {"total_tokens": 5}
+    assert dm["choices_fallback"] is True
+
+
+def test_choice_sanitizer_adds_fallback(client_with_root, monkeypatch):
+    client, _ = client_with_root
+
+    async def fake_call_llm(settings, prompt, context=None, max_tokens=None):
+        payload = {
+            "narration": "A single path is offered.",
+            "recap": "Recap text",
+            "stakes": "Stakes",
+            "choices": [{"id": "A", "text": "Wait here", "intent_tag": "talk", "risk": "low"}],
+            "consequence_echo": "Echo",
+        }
+        return {"content": json.dumps(payload)}
+
+    monkeypatch.setattr("service.narration.call_llm_api", fake_call_llm)
+
+    preview_id = _prepare_preview(client)
+    resp = client.post("/sessions/example-rogue/turn/commit-and-narrate", json={"preview_id": preview_id})
+    assert resp.status_code == 200
+    dm = resp.json()["dm"]
+    assert len(dm["choices"]) >= 2
+    assert dm["choices_fallback"] is True

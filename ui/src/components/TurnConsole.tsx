@@ -46,6 +46,8 @@ interface DMNarration {
   stakes: string;
   choices: DMChoice[];
   discovery_added?: DiscoveryItem;
+  consequence_echo?: string;
+  choices_fallback?: boolean;
 }
 
 interface TurnRecord {
@@ -148,7 +150,7 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
     onSuccess: (data: CommitAndNarrateResponse) => {
       setDmOutput(data.dm);
       setLastDiff(data.turn_record.diff || []);
-      setLastConsequence(data.turn_record.consequence_echo || null);
+      setLastConsequence(data.turn_record.consequence_echo || data.dm?.consequence_echo || null);
       setPreview(null);
       setResponse('');
       queryClient.invalidateQueries();
@@ -159,6 +161,25 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
 
   const isLockedByMe = turnData?.lock_status?.owner === 'user1';
   const isLockedByOther = turnData?.lock_status && !isLockedByMe;
+
+  const fallbackChoices: DMChoice[] = [
+    { id: 'A', text: `Ask around ${stateData?.location ? `near ${stateData.location}` : 'the area'}`, intent_tag: 'talk', risk: 'low' },
+    { id: 'B', text: 'Scout cautiously for clues', intent_tag: 'sneak', risk: 'medium' },
+    { id: 'C', text: 'Take a bold, risky push forward', intent_tag: 'fight', risk: 'high' },
+  ];
+  const rawChoices = dmOutput?.choices || [];
+  const validatedChoices = rawChoices.filter(c => c && c.text && c.intent_tag && c.risk);
+  const needsChoiceFallback = validatedChoices.length < 2 || validatedChoices.length > 4;
+  const displayChoices = needsChoiceFallback ? fallbackChoices : validatedChoices;
+  const panelData: DMNarration = dmOutput || {
+    narration: 'No DM narration received yet. Showing fallback options so you can keep playing.',
+    recap: 'The party pauses while the DM responds.',
+    stakes: 'Every option still advances the scene.',
+    choices: fallbackChoices,
+    consequence_echo: lastConsequence || undefined,
+    choices_fallback: true,
+  };
+  const showFallbackBadge = needsChoiceFallback || panelData.choices_fallback;
 
   return (
     <div className="turn-console">
@@ -182,39 +203,39 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
             <pre>{turnData?.prompt}</pre>
           </div>
 
-          {dmOutput && (
-            <div className="dm-output">
-              <div className="dm-output__header">
-                <div>
-                  <div className="dm-output__title">DM Narration</div>
-                  <div className="dm-output__stakes">{dmOutput.stakes}</div>
+          <div className="dm-output">
+            <div className="dm-output__header">
+              <div>
+                <div className="dm-output__title">
+                  DM Narration {showFallbackBadge && <span className="fallback-badge">(fallback)</span>}
                 </div>
-              </div>
-              <p className="dm-output__narration">{dmOutput.narration}</p>
-              <div className="dm-output__recap"><strong>Recap:</strong> {dmOutput.recap}</div>
-              {dmOutput.discovery_added && (
-                <div className="dm-output__discovery">
-                  <div className="discovery-label">Discovery</div>
-                  <div className="discovery-title">{dmOutput.discovery_added.title}</div>
-                  <div className="discovery-text">{dmOutput.discovery_added.text}</div>
-                </div>
-              )}
-              <div className="dm-output__choices">
-                {dmOutput.choices.map((choice) => (
-                  <button
-                    key={choice.id}
-                    className="choice-chip"
-                    onClick={() => setResponse(choice.text)}
-                    title={`${choice.intent_tag} • ${choice.risk} risk`}
-                  >
-                    <span className="choice-id">{choice.id}</span>
-                    <span className="choice-text">{choice.text}</span>
-                    <span className="choice-meta">{choice.intent_tag} • {choice.risk} risk</span>
-                  </button>
-                ))}
+                <div className="dm-output__stakes">{panelData.stakes}</div>
               </div>
             </div>
-          )}
+            <p className="dm-output__narration">{panelData.narration}</p>
+            <div className="dm-output__recap"><strong>Recap:</strong> {panelData.recap}</div>
+            {panelData.discovery_added && (
+              <div className="dm-output__discovery">
+                <div className="discovery-label">Discovery</div>
+                <div className="discovery-title">{panelData.discovery_added.title}</div>
+                <div className="discovery-text">{panelData.discovery_added.text}</div>
+              </div>
+            )}
+            <div className="dm-output__choices">
+              {displayChoices.map((choice) => (
+                <button
+                  key={choice.id}
+                  className="choice-chip"
+                  onClick={() => setResponse(choice.text)}
+                  title={`${choice.intent_tag} • ${choice.risk} risk`}
+                >
+                  <span className="choice-id">{choice.id}</span>
+                  <span className="choice-text">{choice.text}</span>
+                  <span className="choice-meta">{choice.intent_tag} • {choice.risk} risk</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="guidance">
             <div className="guidance-title">Choice rules for this turn</div>
@@ -403,6 +424,16 @@ const turnConsoleCSS = `
 .dm-output__title {
   font-weight: 700;
   color: #8B4513;
+}
+
+.fallback-badge {
+  font-size: 11px;
+  color: #8B4513;
+  background: #f6eddd;
+  border: 1px solid #d4b48d;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-left: 6px;
 }
 
 .dm-output__stakes {

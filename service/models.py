@@ -253,6 +253,8 @@ class DMNarration(BaseModel):
     stakes: str
     choices: List[DMChoice] = Field(min_length=2, max_length=4)
     discovery_added: Optional[DiscoveryItem] = None
+    consequence_echo: Optional[str] = None
+    choices_fallback: bool = False
 
 
 class TurnRecord(BaseModel):
