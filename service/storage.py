@@ -627,7 +627,7 @@ def _apply_state_patch(state: Dict, patch: Dict) -> Dict:
     return merged
 
 
-def _summarize_state_diff(before: Dict, after: Dict) -> List[str]:
+def summarize_state_diff(before: Dict, after: Dict) -> List[str]:
     changes: List[str] = []
     keys = set(before.keys()) | set(after.keys())
     for key in sorted(keys):
@@ -636,10 +636,89 @@ def _summarize_state_diff(before: Dict, after: Dict) -> List[str]:
     return changes
 
 
+def persist_turn_record(
+    settings: Settings,
+    slug: str,
+    record: Dict,
+):
+    session_path = _ensure_session(settings, slug)
+    turns_dir = session_path / "turns"
+    turns_dir.mkdir(exist_ok=True)
+    turn_number = record.get("turn")
+    if turn_number is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Turn number required for record")
+    record_path = turns_dir / f"{turn_number}.json"
+    with record_path.open("w", encoding="utf-8") as handle:
+        json.dump(record, handle, indent=2, default=str)
+
+
+def record_last_discovery_turn(settings: Settings, slug: str, turn: int):
+    session_path = _ensure_session(settings, slug)
+    path = session_path / "last_discovery.json"
+    payload = {"turn": turn, "recorded_at": datetime.now(timezone.utc).isoformat()}
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def get_last_discovery_turn(settings: Settings, slug: str) -> Optional[int]:
+    session_path = _ensure_session(settings, slug)
+    path = session_path / "last_discovery.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        turn = data.get("turn")
+        return int(turn) if turn is not None else None
+    except Exception:
+        return None
+
+
+def load_turn_records(settings: Settings, slug: str, limit: int) -> List[Dict]:
+    session_path = _ensure_session(settings, slug)
+    turns_dir = session_path / "turns"
+    if not turns_dir.exists():
+        return []
+    records: List[Dict] = []
+    def _turn_key(p: Path) -> int:
+        try:
+            return int(p.stem)
+        except ValueError:
+            return -1
+
+    for path in sorted(turns_dir.glob("*.json"), key=_turn_key, reverse=True):
+        try:
+            with path.open(encoding="utf-8") as handle:
+                records.append(json.load(handle))
+        except Exception:
+            continue
+        if len(records) >= limit:
+            break
+    return records
+
+
+def load_turn_record(settings: Settings, slug: str, turn: int) -> Dict:
+    session_path = _ensure_session(settings, slug)
+    record_path = session_path / "turns" / f"{turn}.json"
+    if not record_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turn record not found")
+    with record_path.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 def _preview_path(session_path: Path, preview_id: str) -> Path:
     preview_dir = session_path / _PREVIEWS_DIRNAME
     preview_dir.mkdir(exist_ok=True)
     return preview_dir / f"{preview_id}.json"
+
+
+def load_preview_metadata(settings: Settings, slug: str, preview_id: str) -> Dict:
+    session_path = _ensure_session(settings, slug)
+    preview_file = _preview_path(session_path, preview_id)
+    if not preview_file.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview not found or expired")
+    data = json.loads(preview_file.read_text(encoding="utf-8"))
+    if data.get("slug") != slug:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Preview slug mismatch")
+    return data
 
 
 def create_preview(settings: Settings, slug: str, request: PreviewRequest) -> Tuple[str, List[Dict], Dict]:
@@ -662,7 +741,7 @@ def create_preview(settings: Settings, slug: str, request: PreviewRequest) -> Tu
         entropy_usage = "No dice reserved"
 
     diffs: List[Dict] = []
-    state_changes = _summarize_state_diff(base_state_dict, proposed_state_dict)
+    state_changes = summarize_state_diff(base_state_dict, proposed_state_dict)
     if state_changes:
         diffs.append({"path": "state.json", "changes": "; ".join(state_changes)})
     if request.transcript_entry or request.response:
@@ -695,9 +774,7 @@ def commit_preview(settings: Settings, slug: str, preview_id: str, lock_owner: O
     preview_file = _preview_path(session_path, preview_id)
     if not preview_file.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview not found or expired")
-    preview_data = json.loads(preview_file.read_text(encoding="utf-8"))
-    if preview_data.get("slug") != slug:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Preview slug mismatch")
+    preview_data = load_preview_metadata(settings, slug, preview_id)
 
     current_state = _validate_state(load_state(settings, slug))
     current_hash = _canonical_hash(current_state.model_dump(mode="json"))

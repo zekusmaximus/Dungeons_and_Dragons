@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from enum import Enum
@@ -233,3 +233,39 @@ class ServerSentEvent(BaseModel):
     type: EventType
     data: Dict[str, Any]
     timestamp: datetime
+
+
+class DMChoice(BaseModel):
+    id: str
+    text: str
+    intent_tag: Literal["talk", "sneak", "fight", "magic", "investigate", "travel", "other"]
+    risk: Literal["low", "medium", "high"]
+
+
+class DiscoveryItem(BaseModel):
+    title: str
+    text: str
+
+
+class DMNarration(BaseModel):
+    narration: str
+    recap: str
+    stakes: str
+    choices: List[DMChoice] = Field(min_length=2, max_length=4)
+    discovery_added: Optional[DiscoveryItem] = None
+
+
+class TurnRecord(BaseModel):
+    turn: int
+    player_intent: str
+    diff: List[str]
+    consequence_echo: str
+    dm: DMNarration
+    created_at: datetime
+
+
+class CommitAndNarrateResponse(BaseModel):
+    commit: CommitResponse
+    dm: DMNarration
+    turn_record: TurnRecord
+    usage: Optional[Dict[str, int]] = None
