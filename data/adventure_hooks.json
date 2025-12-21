@@ -1,0 +1,77 @@
+[
+  {
+    "hook_id": "hook-001",
+    "title": "The Missing Caravan",
+    "description": "A merchant caravan has gone missing on the road to Silverpeak. The local guild is offering a reward for information or rescue.",
+    "hook_type": "quest",
+    "location": "Silverpeak Road",
+    "difficulty": "easy",
+    "rewards": [
+      "100 gold",
+      "Merchant favor",
+      "Experience"
+    ],
+    "starting_scene": "You stand at the town gates of Briarwood, where a worried merchant approaches you with a plea for help.",
+    "quest_template": null
+  },
+  {
+    "hook_id": "hook-002",
+    "title": "The Haunted Mill",
+    "description": "Strange lights and eerie sounds come from the old mill at night. The townsfolk are too afraid to investigate.",
+    "hook_type": "mystery",
+    "location": "Briarwood",
+    "difficulty": "medium",
+    "rewards": [
+      "Magic item",
+      "Local hero status",
+      "Experience"
+    ],
+    "starting_scene": "As night falls over Briarwood, you notice the townsfolk avoiding the old mill on the hill, their faces pale with fear.",
+    "quest_template": null
+  },
+  {
+    "hook_id": "hook-003",
+    "title": "Goblin Trouble",
+    "description": "Goblins have been raiding farms on the outskirts. The mayor needs someone to put an end to their mischief.",
+    "hook_type": "combat",
+    "location": "Farmlands near Briarwood",
+    "difficulty": "easy",
+    "rewards": [
+      "50 gold",
+      "Farmers' gratitude",
+      "Experience"
+    ],
+    "starting_scene": "The mayor's office is bustling with angry farmers demanding action against the goblin raids.",
+    "quest_template": null
+  },
+  {
+    "hook_id": "hook-004",
+    "title": "The Lost Heirloom",
+    "description": "A noble family's precious heirloom has been stolen. They suspect a rival house but need proof.",
+    "hook_type": "social",
+    "location": "Briarwood Manor",
+    "difficulty": "medium",
+    "rewards": [
+      "Noble favor",
+      "200 gold",
+      "Experience"
+    ],
+    "starting_scene": "You are summoned to the grand manor of House Briarwood, where Lady Elara explains the delicate situation.",
+    "quest_template": null
+  },
+  {
+    "hook_id": "hook-005",
+    "title": "The Cursed Forest",
+    "description": "The Whispering Woods are said to contain ancient elven ruins with powerful magic, but none who enter return unchanged.",
+    "hook_type": "exploration",
+    "location": "Whispering Woods",
+    "difficulty": "hard",
+    "rewards": [
+      "Powerful artifact",
+      "Ancient knowledge",
+      "Experience"
+    ],
+    "starting_scene": "At the edge of the forest, the trees seem to whisper your name as the wind rustles through their leaves.",
+    "quest_template": null
+  }
+]

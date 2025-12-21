@@ -1,0 +1,11 @@
+{
+  "active": [
+    {
+      "source": "high ground at city gate",
+      "type": "positional",
+      "bonus": "+2 to perception checks while overlooking traffic",
+      "expires": "end of scene"
+    }
+  ],
+  "tracking_rules": "Update after every scene with [advantage:update]; store dice indices used to earn advantages."
+}

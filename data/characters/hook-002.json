@@ -1,0 +1,68 @@
+{
+  "slug": "hook-002",
+  "name": "Kestrel Quickstep",
+  "race": "Halfling",
+  "class": "Rogue (Thief)",
+  "background": "Criminal",
+  "level": 3,
+  "hp": 21,
+  "ac": 15,
+  "abilities": {
+    "str": 10,
+    "dex": 17,
+    "con": 14,
+    "int": 12,
+    "wis": 13,
+    "cha": 11
+  },
+  "skills": {
+    "acrobatics": 5,
+    "athletics": 2,
+    "perception": 3,
+    "stealth": 7,
+    "sleight_of_hand": 5,
+    "investigation": 3
+  },
+  "proficiencies": {
+    "skills": [
+      "acrobatics",
+      "perception",
+      "stealth",
+      "sleight of hand",
+      "investigation"
+    ],
+    "tools": [
+      "thieves' tools"
+    ],
+    "languages": [
+      "Common",
+      "Halfling"
+    ]
+  },
+  "inventory": [
+    "Rapier",
+    "Shortbow (20 arrows)",
+    "Leather armor",
+    "Thieves' tools",
+    "Burglar's pack",
+    "Cloak with hidden pocket"
+  ],
+  "starting_equipment": [
+    "Rapier",
+    "Shortbow (20 arrows)",
+    "Leather armor",
+    "Thieves' tools",
+    "Burglar's pack",
+    "Cloak with hidden pocket"
+  ],
+  "features": [
+    "Sneak Attack (2d6)",
+    "Cunning Action",
+    "Second-Story Work",
+    "Fast Hands",
+    "Lucky",
+    "Brave"
+  ],
+  "notes": "Prefers stealth and agility, keeps a wary eye on city guards.",
+  "creation_source": "dm"
+}
