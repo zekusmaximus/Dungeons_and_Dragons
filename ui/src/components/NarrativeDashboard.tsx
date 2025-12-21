@@ -5,6 +5,8 @@ import TurnConsole from './TurnConsole';
 import LLMConfig from './LLMConfig';
 import CharacterSheet from './CharacterSheet';
 import ExplorationMap from './ExplorationMap';
+import TurnStakesPanel from './TurnStakesPanel';
+import DialogueSystem from './DialogueSystem';
 
 interface NarrativeDashboardProps {
   sessionSlug: string;
@@ -12,7 +14,7 @@ interface NarrativeDashboardProps {
 }
 
 const NarrativeDashboard: React.FC<NarrativeDashboardProps> = ({ sessionSlug, onBackToLobby }) => {
-  const [activeTab, setActiveTab] = useState<'journal' | 'adventure' | 'character' | 'settings'>('adventure');
+  const [activeTab, setActiveTab] = useState<'journal' | 'adventure' | 'character' | 'settings' | 'map'>('adventure');
   const [showLLMConfig, setShowLLMConfig] = useState(false);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
 
@@ -182,6 +184,12 @@ const NarrativeDashboard: React.FC<NarrativeDashboardProps> = ({ sessionSlug, on
                 </div>
               ) : (
                 <div className="scene-content">
+                  <TurnStakesPanel
+                    sessionSlug={sessionSlug}
+                    sessionState={sessionState}
+                    currentTurn={currentTurn}
+                    character={character}
+                  />
                   <p className="scene-description">{currentScene}</p>
 
                   {/* Quick Action Buttons */}
@@ -255,7 +263,9 @@ const NarrativeDashboard: React.FC<NarrativeDashboardProps> = ({ sessionSlug, on
         </div>
         <div className="status-item">
           <span className="status-label">Gold:</span>
-          <span className="status-value">{sessionState?.gold || 0} GP</span>
+          <span className="status-value">
+            {sessionState?.gp ?? sessionState?.gold ?? 0} GP
+          </span>
         </div>
       </div>
     </div>

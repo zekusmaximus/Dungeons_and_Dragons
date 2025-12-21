@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 interface NPCDialogue {
   id: string;
@@ -22,7 +22,6 @@ const DialogueSystem: React.FC<DialogueSystemProps> = ({ sessionSlug, npcId, onC
   const [dialogueHistory, setDialogueHistory] = useState<{sender: string; message: string}[]>([]);
   const [currentDialogue, setCurrentDialogue] = useState<NPCDialogue | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [isTyping, setIsTyping] = useState(false);
   const [typingMessage, setTypingMessage] = useState('');
   const [npcTyping, setNpcTyping] = useState(false);
 

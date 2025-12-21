@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 interface JournalEntry {
@@ -22,7 +22,7 @@ const fetchJournalEntries = async (sessionSlug: string): Promise<JournalEntry[]>
   if (!response.ok) throw new Error('Failed to fetch journal entries');
   
   const data = await response.json();
-  return data.items.map((item, index) => ({
+  return data.items.map((item: any, index: number) => ({
     id: `entry-${index}`,
     timestamp: item.timestamp || new Date().toISOString(),
     type: item.type || 'general',
@@ -192,7 +192,7 @@ const AdventureJournal: React.FC<AdventureJournalProps> = ({ sessionSlug, onAddE
         <div className="journal-stats">
           <span>📊 {filteredEntries.length} entries</span>
           <span>🗓️ {entries?.length || 0} total</span>
-          <button onClick={refetch} className="refresh-button">↻ Refresh</button>
+          <button onClick={() => refetch()} className="refresh-button">↻ Refresh</button>
         </div>
       </div>
     </div>

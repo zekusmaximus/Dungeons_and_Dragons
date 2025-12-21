@@ -21,7 +21,7 @@ const renderWithClient = (ui: React.ReactElement) => {
 
 test('renders lobby with sessions', async () => {
   const mockOnSelect = jest.fn();
-  renderWithClient(<Lobby onSelectSession={mockOnSelect} />);
+  renderWithClient(<Lobby onSelectSession={mockOnSelect} onNewAdventure={jest.fn()} />);
 
   expect(screen.getByText('Session Lobby')).toBeInTheDocument();
   // Since we can't mock fetch easily, just check the structure
