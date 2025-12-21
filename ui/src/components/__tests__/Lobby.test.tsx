@@ -21,8 +21,16 @@ const renderWithClient = (ui: React.ReactElement) => {
 
 test('renders lobby with sessions', async () => {
   const mockOnSelect = jest.fn();
+  global.fetch = jest.fn((url: RequestInfo | URL) =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve([]),
+    } as unknown as Response)
+  );
+
   renderWithClient(<Lobby onSelectSession={mockOnSelect} onNewAdventure={jest.fn()} />);
 
-  expect(screen.getByText('Session Lobby')).toBeInTheDocument();
-  // Since we can't mock fetch easily, just check the structure
+  expect(await screen.findByText(/Solo Adventure Lobby/)).toBeInTheDocument();
+  expect(await screen.findByText('Your Adventures')).toBeInTheDocument();
+  expect(screen.getByText('No existing adventures found.')).toBeInTheDocument();
 });
