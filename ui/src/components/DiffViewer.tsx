@@ -6,10 +6,6 @@ interface FileDiff {
   changes: string;
 }
 
-interface DiffResponse {
-  files: FileDiff[];
-}
-
 interface DiffViewerProps {
   sessionSlug: string;
 }

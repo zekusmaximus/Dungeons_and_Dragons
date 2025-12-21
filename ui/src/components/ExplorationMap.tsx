@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 interface MapLocation {
@@ -39,7 +39,7 @@ const ExplorationMap: React.FC<ExplorationMapProps> = ({ sessionSlug, onLocation
     },
   });
 
-  const [playerPosition, setPlayerPosition] = useState({ x: 400, y: 300 });
+  const playerPosition = { x: 400, y: 300 };
 
   const handleLocationClick = (location: MapLocation) => {
     setSelectedLocation(location);

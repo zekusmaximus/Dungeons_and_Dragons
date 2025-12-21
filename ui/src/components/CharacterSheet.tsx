@@ -6,25 +6,28 @@ interface CharacterSheetProps {
   onClose: () => void;
 }
 
+interface AbilityScores {
+  str: number;
+  dex: number;
+  con: number;
+  int: number;
+  wis: number;
+  cha: number;
+  [key: string]: number;
+}
+
 interface CharacterData {
-  name: string;
-  race: string;
-  class: string;
-  level: number;
-  background: string;
-  alignment: string;
-  experience: number;
-  abilities: {
-    strength: number;
-    dexterity: number;
-    constitution: number;
-    intelligence: number;
-    wisdom: number;
-    charisma: number;
-  };
-  skills: Record<string, boolean>;
-  inventory: string[];
-  equipment: {
+  name?: string;
+  race?: string;
+  class?: string;
+  level?: number;
+  background?: string;
+  alignment?: string;
+  experience?: number;
+  abilities?: AbilityScores;
+  skills?: Record<string, number>;
+  inventory?: string[];
+  equipment?: {
     weapon?: string;
     armor?: string;
     shield?: string;
@@ -32,24 +35,29 @@ interface CharacterData {
   };
   spells?: string[];
   features?: string[];
+  ac?: number;
+  hp?: number;
+  speed?: number | string;
+  max_hp?: number;
 }
 
 interface SessionState {
-  hp: number;
-  max_hp: number;
-  ac: number;
-  gold: number;
-  conditions: string[];
+  hp?: number;
+  max_hp?: number;
+  ac?: number;
+  gold?: number;
+  gp?: number;
+  conditions?: string[];
   spell_slots?: Record<string, number>;
 }
 
 const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose }) => {
-  const { data: character, isLoading: isCharacterLoading } = useQuery({
+  const { data: character, isLoading: isCharacterLoading } = useQuery<CharacterData>({
     queryKey: ['character', sessionSlug],
     queryFn: () => fetch(`/api/data/characters/${sessionSlug}.json`).then(r => r.json()),
   });
 
-  const { data: state, isLoading: isStateLoading } = useQuery({
+  const { data: state, isLoading: isStateLoading } = useQuery<SessionState>({
     queryKey: ['state', sessionSlug],
     queryFn: () => fetch(`/api/sessions/${sessionSlug}/state`).then(r => r.json()),
   });
@@ -74,9 +82,6 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
   // Calculate ability modifiers
   const getModifier = (score: number) => Math.floor((score - 10) / 2);
 
-  // Get proficiency bonus (assuming standard progression)
-  const proficiencyBonus = Math.floor((character.level || 1) / 4) + 2;
-
   return (
     <div className="character-sheet">
       <style>{characterSheetCSS}</style>
@@ -97,20 +102,20 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             <div className="stat-box">
               <div className="stat-label">HP</div>
               <div className="stat-value">
-                {state?.hp || character.max_hp || '?'}/{state?.max_hp || character.max_hp || '?'}
+                {state?.hp ?? character?.max_hp ?? '?'}{`/`}{state?.max_hp ?? character?.max_hp ?? '?'}
               </div>
             </div>
 
             <div className="stat-box">
               <div className="stat-label">AC</div>
-              <div className="stat-value">{state?.ac || character.ac || '?'}</div>
+              <div className="stat-value">{state?.ac ?? character?.ac ?? '?'}</div>
             </div>
 
             <div className="stat-box">
               <div className="stat-label">Initiative</div>
               <div className="stat-value">
-                {getModifier(character.abilities?.dexterity || 10) >= 0 ? '+' : ''}
-                {getModifier(character.abilities?.dexterity || 10)}
+                {getModifier(character.abilities?.dex ?? 10) >= 0 ? '+' : ''}
+                {getModifier(character.abilities?.dex ?? 10)}
               </div>
             </div>
 
@@ -140,7 +145,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
           <div className="abilities-grid">
             {Object.entries(character.abilities || {}).map(([ability, score]) => (
               <div key={ability} className="ability-box">
-                <div className="ability-name">{ability.charAt(0).toUpperCase() + ability.slice(1).substring(0, 3)}</div>
+                <div className="ability-name">{ability.toUpperCase()}</div>
                 <div className="ability-score">{score}</div>
                 <div className="ability-modifier">
                   {getModifier(score) >= 0 ? '+' : ''}{getModifier(score)}
@@ -157,12 +162,11 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             <div className="skills-section">
               <h3>Skills</h3>
               <div className="skills-grid">
-                {Object.entries(character.skills || {}).map(([skill, isProficient]) => (
+                {Object.entries(character.skills || {}).map(([skill, bonus]) => (
                   <div key={skill} className="skill-item">
                     <span className="skill-name">{skill}</span>
                     <span className="skill-bonus">
-                      {isProficient ? '+' : ''}{getModifier(character.abilities?.intelligence || 10)}
-                      {isProficient && ` + ${proficiencyBonus}`}
+                      {bonus >= 0 ? '+' : ''}{bonus ?? 0}
                     </span>
                   </div>
                 ))}
@@ -184,7 +188,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
                 )}
               </div>
               <div className="gold-display">
-                💰 Gold: {state?.gold || 0} GP
+                💰 Gold: {state?.gold ?? state?.gp ?? 0} GP
               </div>
             </div>
           </div>
@@ -232,12 +236,12 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             </div>
 
             {/* Spells (if applicable) */}
-            {character.spells?.length && (
+            {Boolean(character.spells?.length) && (
               <div className="spells-section">
                 <h3>Spells</h3>
                 <div className="spells-list">
                   <ul>
-                    {character.spells.map((spell, index) => (
+                    {character.spells?.map((spell, index) => (
                       <li key={index}>{spell}</li>
                     ))}
                   </ul>
@@ -261,11 +265,11 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
         </div>
 
         {/* Conditions */}
-        {state?.conditions?.length && (
+        {Boolean(state?.conditions?.length) && (
           <div className="conditions-section">
             <h3>Conditions</h3>
             <div className="conditions-list">
-              {state.conditions.map((condition, index) => (
+              {state?.conditions?.map((condition, index) => (
                 <span key={index} className="condition-badge">{condition}</span>
               ))}
             </div>
