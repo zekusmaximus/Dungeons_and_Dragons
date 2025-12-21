@@ -1,7 +1,6 @@
 from typing import Optional, List, Dict
 from datetime import datetime
 import json
-import httpx
 
 import uuid
 
@@ -10,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .config import Settings, get_settings
+from .llm import call_llm_api, get_effective_llm_config, persist_llm_config
 from . import storage
 from .models import (
     SessionSummary, PaginatedResponse,
@@ -46,7 +46,7 @@ class LLMNarrativeResponse(BaseModel):
 
 
 class LLMConfigRequest(BaseModel):
-    api_key: str
+    api_key: Optional[str] = None
     base_url: Optional[str] = None
     model: Optional[str] = None
 
@@ -55,62 +55,9 @@ class LLMConfigResponse(BaseModel):
     api_key_set: bool
     current_model: str
     base_url: str
-
-
-async def call_llm_api(
-    settings: Settings,
-    prompt: str,
-    context: Optional[Dict] = None,
-    max_tokens: Optional[int] = None
-) -> str:
-    """Call LLM API for narrative generation"""
-    if not settings.has_llm_config:
-        raise HTTPException(
-            status_code=400,
-            detail="LLM API key not configured. Please set DM_SERVICE_LLM_API_KEY or use /llm/config endpoint."
-        )
-    
-    max_tokens = max_tokens or settings.llm_max_tokens
-    
-    # Build the prompt with context
-    full_prompt = prompt
-    if context:
-        context_str = json.dumps(context)
-        full_prompt = f"Context: {context_str}\n\nPrompt: {prompt}"
-    
-    headers = {
-        "Authorization": f"Bearer {settings.llm_api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "model": settings.llm_model,
-        "messages": [{"role": "user", "content": full_prompt}],
-        "temperature": settings.llm_temperature,
-        "max_tokens": max_tokens
-    }
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                f"{settings.llm_base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            result = response.json()
-            return result["choices"][0]["message"]["content"].strip()
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"LLM API error: {e.response.text}"
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"LLM API call failed: {str(e)}"
-            )
+    temperature: float
+    max_tokens: int
+    source: str
 
 
 def get_settings_dep() -> Settings:
@@ -491,10 +438,14 @@ def session_entropy_history(
 
 @app.get("/llm/config", tags=["LLM"], summary="Get current LLM configuration")
 def get_llm_config(settings: Settings = Depends(get_settings_dep)) -> LLMConfigResponse:
+    effective = get_effective_llm_config(settings)
     return LLMConfigResponse(
-        api_key_set=settings.has_llm_config,
-        current_model=settings.llm_model,
-        base_url=settings.llm_base_url
+        api_key_set=effective.api_key is not None and len(effective.api_key) > 0,
+        current_model=effective.model,
+        base_url=effective.base_url,
+        temperature=effective.temperature,
+        max_tokens=effective.max_tokens,
+        source=effective.source,
     )
 
 
@@ -503,12 +454,21 @@ def configure_llm(
     config: LLMConfigRequest,
     settings: Settings = Depends(get_settings_dep)
 ) -> LLMConfigResponse:
-    # In a real implementation, you would persist this configuration
-    # For now, we'll just return the current config
+    effective = persist_llm_config(
+        settings,
+        {
+            "api_key": config.api_key,
+            "base_url": config.base_url,
+            "model": config.model,
+        },
+    )
     return LLMConfigResponse(
-        api_key_set=settings.has_llm_config,
-        current_model=config.model or settings.llm_model,
-        base_url=config.base_url or settings.llm_base_url
+        api_key_set=effective.api_key is not None and len(effective.api_key) > 0,
+        current_model=effective.model,
+        base_url=effective.base_url,
+        temperature=effective.temperature,
+        max_tokens=effective.max_tokens,
+        source=effective.source,
     )
 
 
@@ -517,6 +477,7 @@ async def generate_narrative(
     request: LLMNarrativeRequest,
     settings: Settings = Depends(get_settings_dep)
 ) -> LLMNarrativeResponse:
+    effective = get_effective_llm_config(settings)
     narrative = await call_llm_api(
         settings,
         request.prompt,
@@ -526,7 +487,7 @@ async def generate_narrative(
     return LLMNarrativeResponse(
         narrative=narrative,
         tokens_used=len(narrative.split()),  # Simple word count as proxy
-        model=settings.llm_model
+        model=effective.model
     )
 
 
@@ -552,6 +513,7 @@ async def generate_scene_narrative(
     if request.context:
         context.update(request.context)
     
+    effective = get_effective_llm_config(settings)
     narrative = await call_llm_api(
         settings,
         request.prompt,
@@ -562,7 +524,7 @@ async def generate_scene_narrative(
     return LLMNarrativeResponse(
         narrative=narrative,
         tokens_used=len(narrative.split()),
-        model=settings.llm_model
+        model=effective.model
     )
 
 

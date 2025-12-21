@@ -5,6 +5,9 @@ interface LLMConfig {
   api_key_set: boolean;
   current_model: string;
   base_url: string;
+  temperature: number;
+  max_tokens: number;
+  source: string;
 }
 
 interface LLMConfigProps {
@@ -48,6 +51,13 @@ const LLMConfig: React.FC<LLMConfigProps> = ({ onConfigSaved }) => {
     },
   });
 
+  React.useEffect(() => {
+    if (config) {
+      setBaseUrl(config.base_url);
+      setModel(config.current_model);
+    }
+  }, [config]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     mutation.mutate({ api_key: apiKey, base_url: baseUrl, model });
@@ -65,10 +75,17 @@ const LLMConfig: React.FC<LLMConfigProps> = ({ onConfigSaved }) => {
         ) : (
           <span className="status-inactive">✗ LLM API not configured</span>
         )}
+        <span className="config-source">
+          Using {config?.source === 'file' ? 'saved' : 'environment'} settings
+        </span>
         <button onClick={() => setShowConfig(!showConfig)}>
           {showConfig ? 'Hide' : 'Configure'}
         </button>
       </div>
+      <p className="config-note">
+        API keys are stored locally in <code>.dm_llm_config.json</code> at the repo root and are not returned by the API.
+        Base URL and model defaults come from environment variables if no saved config exists.
+      </p>
 
       {showConfig && (
         <form onSubmit={handleSubmit} className="config-form">
