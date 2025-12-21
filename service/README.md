@@ -4,7 +4,7 @@ This FastAPI service surfaces the deterministic gameplay data already stored in 
 
 ## Quickstart
 
-1. Install dependencies:
+1. Install dependencies (ideally in a virtual environment):
 
 ```bash
 pip install -r service/requirements.txt
@@ -23,6 +23,9 @@ The service defaults to using the repository root for data. Override paths with 
 - `DM_SERVICE_DICE_FILE`: relative path to entropy file (default: `dice/entropy.ndjson`)
 - `DM_SERVICE_TRANSCRIPT_TAIL`: default number of transcript lines to return
 - `DM_SERVICE_CHANGELOG_TAIL`: default number of changelog entries to return
+- `DM_SERVICE_LLM_API_KEY` / `DM_SERVICE_LLM_MODEL` / `DM_SERVICE_LLM_BASE_URL`: defaults for LLM calls (overridable via `/llm/config`)
+
+LLM overrides are persisted to `.dm_llm_config.json` in the repo root (git-ignored). Keys are never returned by the API.
 
 ## API surface
 
@@ -35,10 +38,18 @@ The service defaults to using the repository root for data. Override paths with 
 - `GET /sessions/{slug}/npc-memory` — NPC impressions for the session
 - `GET /sessions/{slug}/world/factions` — faction standings for the session world
 - `GET /sessions/{slug}/world/timeline` — world timeline entries
+- `GET /sessions/{slug}/world/faction-clocks` — world project clocks
 - `GET /entropy?limit=N` — preview the first N entropy entries
+- `GET/POST /llm/config` — view or persist LLM configuration (base URL, model, API key presence)
+- `POST /llm/narrate` and `POST /sessions/{slug}/llm/narrate` — contract-aware LLM calls (session route injects character/state context)
+- Additional endpoints cover adventure hooks, quests, NPC relationships, discoveries, and auto-save; some job/diff flows remain placeholders.
 
 Container builds are supported via the included `Dockerfile`:
 
 ```bash
 docker build -t dm-service -f service/Dockerfile .
 ```
+
+## Frontend pairing
+
+The React/Vite UI in `/ui` proxies `/api/*` to this service when you run `npm run dev`. Start this FastAPI app on port `8000` first to avoid proxy errors.

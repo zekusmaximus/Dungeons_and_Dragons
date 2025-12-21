@@ -2,13 +2,13 @@
 
 ## Introduction
 
-Welcome to the Dungeons & Dragons (D&D) digital gaming platform! This application provides a comprehensive tool for running tabletop RPG campaigns, featuring deterministic dice rolls for consistent gameplay and file-based storage for persistent, shareable campaign data. Whether you're a Dungeon Master (DM) or a player, this guide will help you navigate the system and enjoy immersive adventures.
+This project delivers a deterministic, file-backed solo D&D experience. A FastAPI backend reads and writes the same session files a human DM would touch, and a React/Vite UI consumes the API via a `/api` proxy. Dice entropy is pre-generated, gameplay contracts live in `PROTOCOL.md`, and every turn is auditable in the repo.
 
-Key features include:
-- Deterministic dice mechanics using pre-generated entropy for fair, reproducible rolls
-- File-based campaign storage allowing easy backups, sharing, and version control
-- Web-based UI for intuitive gameplay management
-- Modular backend supporting character creation, combat, exploration, and more
+Key pillars:
+- Deterministic dice mechanics using `dice/entropy.ndjson`
+- File-based campaign storage for easy backups and versioning
+- Web UI for browsing sessions and driving turns
+- Modular backend that can be extended with additional tools
 
 ## Getting Started
 
@@ -18,9 +18,9 @@ Key features include:
 - Git for version control (optional but recommended)
 
 ### Installation
-1. Clone or download the project repository to your local machine.
-2. Navigate to the project root directory (`c:/Users/zeke/Desktop/Projects/Dungeons_and_Dragons`).
-3. Install backend dependencies:
+1. Clone or download the project repository.
+2. Navigate to the project root directory.
+3. Install backend dependencies (virtual environment recommended):
    ```
    pip install -r service/requirements.txt
    ```
@@ -32,136 +32,80 @@ Key features include:
    ```
 
 ### Running the Application
-1. Start the backend service from the project root directory:
+1. Start the backend service from the project root directory (port `8000`):
    ```
-   uvicorn service.app:app --reload
+   uvicorn service.app:app --reload --port 8000
    ```
-   Note: Ensure your working directory is the project root (c:/Users/zeke/Desktop/Projects/Dungeons_and_Dragons) before running this command.
-2. In a separate terminal, start the frontend UI:
+2. In a separate terminal, start the frontend UI (proxies `/api` to the backend):
    ```
    cd ui
    npm run dev
    ```
-3. Open your web browser and navigate to `http://localhost:5173` (or the port specified by Vite).
+3. Open your web browser and navigate to `http://localhost:5173` (or the port shown by Vite).
 
 ### Creating Your First Session
-1. Upon launching the UI, you'll see the Lobby component.
-2. Click "New Session" to create a new campaign.
-3. Choose a session name and initial settings.
-4. The system will generate a new directory under `sessions/` with your campaign data.
+1. Launch the UI to see the Lobby component.
+2. Select the shipped **example-rogue** session to begin play. The "New Adventure" flow currently reuses this template.
+3. To create a new session manually, copy `sessions/example-rogue` to a new slug, duplicate `data/characters/example-rogue.json` to `data/characters/<slug>.json`, reset `state.json` to turn `0`, and clear `transcript.md`/`changelog.md` except for initialization text.
+4. Configure your LLM key from the Narrative Dashboard → Settings → LLM Configuration, or set the `DM_SERVICE_LLM_API_KEY` environment variable before starting the backend. The POST `/api/llm/config` endpoint persists overrides to `.dm_llm_config.json` and never echoes your key.
 
 ## Gameplay Mechanics
 
-### Character Creation
-- Use the character creation module to build player characters (PCs) and non-player characters (NPCs).
-- Select race, class, background, and abilities from predefined tables.
-- Characters are stored as JSON files in the `characters/` directory for easy editing and sharing.
+### Character Data
+- Characters live in `data/characters/<slug>.json`.
+- Session state follows `service/models.py::SessionState` and is stored in `sessions/<slug>/state.json`.
 
-### Combat
-- Engage in turn-based combat using the combat calculator.
-- Roll deterministic dice for attacks, damage, and saving throws.
-- Manage initiative, advantage/disadvantage, and stances.
-- Combat logs are recorded in session transcripts for review.
+### Dice
+- Deterministic dice rolls come from `dice/entropy.ndjson`.
+- Use `dice/README.md` and `dice/verify_dice.py` to inspect or extend the pool.
 
-### Exploration
-- Navigate hex-based maps and encounter random events.
-- Use exploration beats and scene types to drive narrative.
-- Terrain and movement modifiers affect travel.
+### Exploration & Narrative
+- The UI surfaces the current scene from `turn.md` and state information from `state.json`.
+- `/sessions/{slug}/llm/narrate` injects session and character context into the LLM call.
 
-### Downtime Activities
-- Between adventures, characters can pursue business ventures, carousing, crafting, research, and training.
-- These activities use downtime rules and can earn experience or resources.
-
-### Narrative Elements
-- Incorporate flashbacks, tone dials, and scene framing for rich storytelling.
-- Manage quests, mysteries, factions, and rumors to build campaign depth.
+### Downtime & Jobs
+- Jobs endpoints (explore/loot/downtime/etc.) exist but currently run placeholder flows; treat them as previews rather than production automation.
 
 ## UI Components
 
 ### Lobby
-The main entry point for managing sessions. View existing campaigns, create new ones, or join active games.
+Lists existing campaigns. The "New Adventure" button currently reuses the template session; manual session creation is recommended until full flow lands.
+
+### Narrative Dashboard
+Shows current scene text, quick actions, transcript/changelog panels, and links to map and character views.
 
 ### Turn Console
-Central hub for gameplay actions. Submit commands, view turn results, and manage initiative.
+Manages lock claim/release and preview/commit calls to the backend turn endpoints.
 
-### Schema Form
-Dynamic form generator for editing game entities like characters, quests, and encounters. Validates input against JSON schemas.
-
-### Clock Visualization
-Visual representation of campaign timeline and events.
-
-### Jobs Drawer
-Monitor background processes and long-running tasks.
-
-### Quest Editor
-Create and modify quest structures with objectives and rewards.
-
-### Diff Viewer
-Compare changes between session snapshots for auditing.
-
-### Export Bundle
-Package campaign data for sharing or backup.
+### LLM Configuration
+Available from the Narrative Dashboard settings modal. Persists base URL/model and key presence to `.dm_llm_config.json` (git-ignored) and never returns the key in responses.
 
 ## Advanced Features
 
-### Deterministic Dice
-- Dice rolls use pre-computed entropy from `dice/entropy.ndjson`.
-- Ensures reproducible results for fair play and debugging.
-- Verify rolls using the `dice/verify_dice.py` script.
-
 ### File-Based Storage
-- All campaign data stored as files in the project directory.
-- Sessions in `sessions/`, characters in `characters/`, data in `data/`.
-- Enables version control with Git, easy backups, and cross-platform compatibility.
+- Sessions live under `sessions/`, characters under `data/characters/`, and supporting data under `worlds/` and `data/`.
+- Version control is encouraged for auditing and backup.
 
 ### Snapshots and Journaling
-- Automatic snapshots capture game state at key points.
-- Journal entries track narrative progress.
-- Changelog documents changes for transparency.
-
-### Rules Integration
-- Searchable rules index for quick reference.
-- Tables for encounters, treasure, weather, and more.
-- Customizable through JSON files.
+- Auto-save endpoints write snapshots beneath `sessions/<slug>/saves` and `auto_save.json`.
+- `transcript.md` and `changelog.md` remain the audit trail for turns.
 
 ### API and Extensibility
-- RESTful API via FastAPI backend.
-- Modular design allows adding new features via Python modules.
-- Docker support for containerized deployment.
+- FastAPI endpoints are defined in `service/app.py`; extend or gate features there.
+- Docker builds are available via `service/Dockerfile`.
 
 ## FAQs
 
-### Q: How do I roll dice?
-A: Dice rolls are handled deterministically by the system. When you perform an action requiring a roll, the backend selects the next entropy value and computes the result.
+### How do I roll dice?
+Dice rolls are deterministic and pulled from `dice/entropy.ndjson`; the next unused entry is consumed for each roll.
 
-### Q: Can I play offline?
-A: Yes, the file-based nature allows running the application locally without internet. However, real-time multiplayer features may require network connectivity.
+### Can I play offline?
+Yes. All data is local; only the LLM endpoint requires internet access.
 
-### Q: How do I backup my campaign?
-A: Simply copy the entire project directory or use Git to commit changes. Session data is stored in `sessions/[session-name]/`.
+### How do I back up my campaign?
+Copy the repo or use Git. Key gameplay files live under `sessions/<slug>/` and `data/characters/`.
 
-### Q: What if I make a mistake in a turn?
-A: Use the snapshot system to revert to previous states. The changelog helps track what changed.
+### What if an API call fails?
+Check the FastAPI logs. Verify that the backend is running on port `8000` and the UI proxy is targeting `/api`. Ensure session files exist and follow the expected schema.
 
-### Q: Can I customize rules or add homebrew content?
-A: Absolutely! Modify JSON files in `tables/`, `data/`, or create new modules in the appropriate directories. The schema system ensures compatibility.
-
-### Q: How do I add new characters or monsters?
-A: Use the character creation tools or manually edit JSON files in `data/characters/` and `data/monsters/`. Validate using the provided schemas.
-
-### Q: Is this compatible with official D&D rules?
-A: The system is designed to support D&D 5th Edition rules, with some customizations for digital play. Check `rules_index/` for specific implementations.
-
-### Q: Troubleshooting: UI not loading
-A: Ensure both backend and frontend are running. Check console for errors. Try clearing browser cache or reinstalling dependencies.
-
-### Q: Troubleshooting: Backend errors
-A: Check `service/app.py` logs. Ensure all Python dependencies are installed. Verify file permissions in the project directory.
-
-### Q: Troubleshooting: 404 error on /api/sessions
-A: After updating vite.config.ts for proxy rewrite changes, the UI dev server MUST be restarted (npm run dev) for the changes to take effect.
-
-### Q: Troubleshooting: 500 Internal Server Error on API calls
-A: This may be due to missing or corrupted session files, missing world data, or backend code issues. Check backend logs for details. Ensure session directories contain required files like state.json, turn.md, etc. Verify that world data exists and is accessible.
-
-For more help, consult the README.md, ENGINE.md, or PROTOCOL.md files in the project root.
+For more detail, see `README.md`, `service/README.md`, `ENGINE.md`, and `PROTOCOL.md`.

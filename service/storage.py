@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 import subprocess
 import tempfile
@@ -13,6 +14,8 @@ from fastapi import HTTPException, status
 
 from .config import Settings
 from .models import LockInfo, JobCreateRequest, JobStatus
+
+_SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def validate_data(data: Dict, schema_name: str, settings: Settings) -> List[str]:
@@ -32,6 +35,11 @@ def validate_data(data: Dict, schema_name: str, settings: Settings) -> List[str]
 
 
 def _ensure_session(settings: Settings, slug: str) -> Path:
+    if not _SLUG_PATTERN.match(slug):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid session slug. Use letters, numbers, hyphens, or underscores.",
+        )
     session_path = settings.sessions_path / slug
     if not session_path.exists() or not session_path.is_dir():
         raise HTTPException(
