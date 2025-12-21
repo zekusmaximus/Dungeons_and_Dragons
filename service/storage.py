@@ -1,21 +1,31 @@
+import hashlib
 import json
 import re
 import uuid
 import subprocess
 import tempfile
 import shutil
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 import jsonschema
 
 from fastapi import HTTPException, status
+from pydantic import ValidationError
 
 from .config import Settings
-from .models import LockInfo, JobCreateRequest, JobStatus
+from .models import LockInfo, JobCreateRequest, JobStatus, SessionState, PreviewRequest
 
 _SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+_PREVIEWS_DIRNAME = "previews"
+
+
+def _canonical_hash(data: Dict) -> str:
+    """Compute a deterministic hash for a JSON-serializable object."""
+    payload = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def validate_data(data: Dict, schema_name: str, settings: Settings) -> List[str]:
@@ -77,6 +87,66 @@ def list_sessions(settings: Settings) -> List[Dict]:
     return sessions
 
 
+def create_session(settings: Settings, slug: str, template_slug: str = "example-rogue") -> str:
+    if not _SLUG_PATTERN.match(slug):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid session slug. Use letters, numbers, hyphens, or underscores.",
+        )
+    settings.sessions_path.mkdir(parents=True, exist_ok=True)
+    session_path = settings.sessions_path / slug
+    if session_path.exists():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Session already exists")
+    template_path = settings.sessions_path / template_slug
+    if not template_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template session not found")
+
+    shutil.copytree(template_path, session_path)
+    lock_path = session_path / "LOCK"
+    if lock_path.exists():
+        lock_path.unlink()
+    preview_dir = session_path / _PREVIEWS_DIRNAME
+    if preview_dir.exists():
+        shutil.rmtree(preview_dir)
+
+    state_path = session_path / "state.json"
+    state = load_state(settings, slug)
+    state["character"] = slug
+    state["turn"] = 0
+    state["log_index"] = 0
+    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+    transcript_path = session_path / "transcript.md"
+    transcript_path.write_text(f"# Transcript: {slug}\n\nThe DM will append narrated scenes here.\n", encoding="utf-8")
+    changelog_path = session_path / "changelog.md"
+    changelog_path.write_text(
+        json.dumps(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "turn": 0,
+                "scene_id": "init",
+                "summary": "Initialized session state",
+                "diffs": {"hp": 0, "inventory": [], "flags": {}},
+                "rolls": [],
+                "rules": ["Initialization"],
+            }
+        ) + "\n",
+        encoding="utf-8",
+    )
+
+    template_character = settings.repo_root / "data" / "characters" / f"{template_slug}.json"
+    destination_character = settings.repo_root / "data" / "characters" / f"{slug}.json"
+    if template_character.exists():
+        try:
+            character_data = json.loads(template_character.read_text(encoding="utf-8"))
+            character_data["slug"] = slug
+            destination_character.write_text(json.dumps(character_data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    return slug
+
+
 def load_state(settings: Settings, slug: str) -> Dict:
     session_path = _ensure_session(settings, slug)
     state_path = session_path / "state.json"
@@ -89,6 +159,16 @@ def load_state(settings: Settings, slug: str) -> Dict:
     if content.startswith('\ufeff'):
         content = content[1:]
     return json.loads(content)
+
+
+def _validate_state(state: Dict) -> SessionState:
+    try:
+        return SessionState(**state)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"State validation failed: {exc}",
+        )
 
 
 def load_text_entries(path: Path, count: Optional[int] = None, cursor: Optional[str] = None) -> Tuple[List[Dict], Optional[str]]:
@@ -447,8 +527,11 @@ def get_lock_info(settings: Settings, slug: str) -> Optional[LockInfo]:
     lock_path = session_path / "LOCK"
     if not lock_path.exists():
         return None
-    with lock_path.open() as handle:
-        data = json.load(handle)
+    try:
+        with lock_path.open() as handle:
+            data = json.load(handle)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Lock file unreadable")
     return LockInfo(
         owner=data["owner"],
         ttl=data["ttl"],
@@ -464,7 +547,7 @@ def claim_lock(settings: Settings, slug: str, owner: str, ttl: int):
     data = {
         "owner": owner,
         "ttl": ttl,
-        "claimed_at": datetime.utcnow().isoformat()
+        "claimed_at": datetime.now(timezone.utc).isoformat()
     }
     with lock_path.open('w') as handle:
         json.dump(data, handle)
@@ -477,38 +560,191 @@ def release_lock(settings: Settings, slug: str):
         lock_path.unlink()
 
 
-# Placeholder for preview and commit logic
-# In a real implementation, this would process the response and compute changes
-def create_preview(settings: Settings, slug: str, response: str) -> Tuple[str, List[Dict], Dict]:
-    # Generate a preview id
-    preview_id = f"preview_{datetime.utcnow().timestamp()}"
-    # Placeholder diffs: assume response is added to transcript
-    diffs = [{"path": "transcript.md", "changes": f"Add: {response[:50]}..."}]
-    # Placeholder entropy plan
-    entropy_plan = {"indices": [], "usage": "No dice rolls in this turn"}
+def _assert_lock_owner(session_path: Path, owner: Optional[str]):
+    """Ensure lock is held by the requester (or absent)."""
+    lock_path = session_path / "LOCK"
+    if not lock_path.exists():
+        if owner:
+            # Require caller to own the lock when specifying owner
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Lock is not claimed")
+        return
+    try:
+        data = json.loads(lock_path.read_text(encoding="utf-8"))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Lock is corrupted")
+    if owner and data.get("owner") != owner:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Lock owned by another actor")
+    if not owner:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Session locked")
+
+
+def _ensure_entropy_available(settings: Settings, target_index: int):
+    """Ensure entropy.ndjson has at least up to the target index."""
+    if target_index <= 0:
+        return
+    if not settings.dice_path.exists():
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Entropy file missing")
+    highest = 0
+    with settings.dice_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                data = json.loads(line)
+                highest = max(highest, data.get("i", 0))
+                if highest >= target_index:
+                    return
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Entropy file corrupt")
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Not enough entropy reserved (need index {target_index}, have {highest})",
+    )
+
+
+def _apply_state_patch(state: Dict, patch: Dict) -> Dict:
+    allowed_fields = set(SessionState.model_fields.keys())
+    disallowed = {"turn", "log_index"}
+    for key in patch.keys():
+        if key in disallowed:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{key}' cannot be set directly")
+        if key not in allowed_fields:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown state field '{key}'")
+    merged = deepcopy(state)
+
+    def _merge_dict(base: Dict, updates: Dict) -> Dict:
+        updated = deepcopy(base)
+        for k, v in updates.items():
+            if isinstance(v, dict) and isinstance(updated.get(k), dict):
+                updated[k] = _merge_dict(updated.get(k, {}), v)
+            else:
+                updated[k] = v
+        return updated
+
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_dict(merged.get(key, {}), value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _summarize_state_diff(before: Dict, after: Dict) -> List[str]:
+    changes: List[str] = []
+    keys = set(before.keys()) | set(after.keys())
+    for key in sorted(keys):
+        if before.get(key) != after.get(key):
+            changes.append(f"{key}: {before.get(key)} -> {after.get(key)}")
+    return changes
+
+
+def _preview_path(session_path: Path, preview_id: str) -> Path:
+    preview_dir = session_path / _PREVIEWS_DIRNAME
+    preview_dir.mkdir(exist_ok=True)
+    return preview_dir / f"{preview_id}.json"
+
+
+def create_preview(settings: Settings, slug: str, request: PreviewRequest) -> Tuple[str, List[Dict], Dict]:
+    session_path = _ensure_session(settings, slug)
+    _assert_lock_owner(session_path, request.lock_owner)
+    current_state = _validate_state(load_state(settings, slug))
+    base_state_dict = current_state.model_dump(mode="json")
+    state_hash = _canonical_hash(base_state_dict)
+
+    proposed_state_dict = _apply_state_patch(base_state_dict, request.state_patch or {})
+    _validate_state(proposed_state_dict)
+
+    dice_count = len(request.dice_expressions or [])
+    next_index = current_state.log_index + 1
+    reserved_indices = list(range(next_index, next_index + dice_count))
+    if reserved_indices:
+        _ensure_entropy_available(settings, reserved_indices[-1])
+        entropy_usage = f"Reserve {dice_count} entries starting at {reserved_indices[0]}"
+    else:
+        entropy_usage = "No dice reserved"
+
+    diffs: List[Dict] = []
+    state_changes = _summarize_state_diff(base_state_dict, proposed_state_dict)
+    if state_changes:
+        diffs.append({"path": "state.json", "changes": "; ".join(state_changes)})
+    if request.transcript_entry or request.response:
+        diffs.append({"path": "transcript.md", "changes": "Append 1 entry"})
+    if request.changelog_entry:
+        diffs.append({"path": "changelog.md", "changes": "Append changelog entry"})
+
+    preview_id = str(uuid.uuid4())
+    preview_metadata = {
+        "id": preview_id,
+        "slug": slug,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "base_turn": current_state.turn,
+        "base_hash": state_hash,
+        "state_patch": request.state_patch or {},
+        "transcript_entry": request.transcript_entry or request.response,
+        "response": request.response,
+        "changelog_entry": request.changelog_entry,
+        "dice_expressions": request.dice_expressions or [],
+        "reserved_indices": reserved_indices,
+    }
+    _preview_path(session_path, preview_id).write_text(json.dumps(preview_metadata, indent=2), encoding="utf-8")
+    entropy_plan = {"indices": reserved_indices, "usage": entropy_usage}
     return preview_id, diffs, entropy_plan
 
 
-def commit_preview(settings: Settings, slug: str, preview_id: str) -> Tuple[Dict, Dict]:
-    # Placeholder: update state turn number, add to transcript and changelog
-    state = load_state(settings, slug)
-    state["turn"] += 1
-    # Save state
+def commit_preview(settings: Settings, slug: str, preview_id: str, lock_owner: Optional[str]) -> Tuple[Dict, Dict]:
     session_path = _ensure_session(settings, slug)
+    _assert_lock_owner(session_path, lock_owner)
+    preview_file = _preview_path(session_path, preview_id)
+    if not preview_file.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview not found or expired")
+    preview_data = json.loads(preview_file.read_text(encoding="utf-8"))
+    if preview_data.get("slug") != slug:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Preview slug mismatch")
+
+    current_state = _validate_state(load_state(settings, slug))
+    current_hash = _canonical_hash(current_state.model_dump(mode="json"))
+    if current_state.turn != preview_data.get("base_turn") or current_hash != preview_data.get("base_hash"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="State changed; preview is stale")
+
+    proposed_state = _apply_state_patch(current_state.model_dump(mode="json"), preview_data.get("state_patch", {}))
+    new_log_index = current_state.log_index
+    reserved_indices: List[int] = preview_data.get("reserved_indices", [])
+    if reserved_indices:
+        expected_start = current_state.log_index + 1
+        if reserved_indices[0] != expected_start:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Entropy reservation mismatch")
+        _ensure_entropy_available(settings, reserved_indices[-1])
+        new_log_index = reserved_indices[-1]
+
+    proposed_state["turn"] = current_state.turn + 1
+    proposed_state["log_index"] = new_log_index
+    proposed_state = _validate_state(proposed_state).model_dump(mode="json")
+
+    # Persist state
     state_path = session_path / "state.json"
-    with state_path.open('w') as handle:
-        json.dump(state, handle)
-    # Append to transcript (placeholder)
+    state_path.write_text(json.dumps(proposed_state, indent=2), encoding="utf-8")
+
     transcript_path = session_path / "transcript.md"
-    with transcript_path.open('a') as handle:
-        handle.write(f"\nTurn {state['turn']}: Committed preview {preview_id}\n")
-    # Append to changelog
     changelog_path = session_path / "changelog.md"
-    with changelog_path.open('a') as handle:
-        handle.write(f"\nCommitted turn {state['turn']}\n")
-    # Log indices
-    log_indices = {"transcript": 0, "changelog": 0}  # placeholder
-    return state, log_indices
+    transcript_path.touch(exist_ok=True)
+    changelog_path.touch(exist_ok=True)
+    transcript_entry = preview_data.get("transcript_entry") or preview_data.get("response")
+    if transcript_entry:
+        with transcript_path.open("a", encoding="utf-8") as handle:
+            handle.write(transcript_entry.rstrip() + "\n")
+    if preview_data.get("changelog_entry"):
+        with changelog_path.open("a", encoding="utf-8") as handle:
+            handle.write(str(preview_data["changelog_entry"]).rstrip() + "\n")
+
+    log_indices = {
+        "transcript": sum(1 for _ in transcript_path.open(encoding="utf-8")) - 1,
+        "changelog": sum(1 for _ in changelog_path.open(encoding="utf-8")) - 1,
+    }
+
+    try:
+        preview_file.unlink()
+    except Exception:
+        pass
+
+    return proposed_state, log_indices
 
 
 # Job management
@@ -516,13 +752,13 @@ _jobs: Dict[str, Dict] = {}  # In-memory job store, in production use persistent
 _executor = ThreadPoolExecutor(max_workers=4)
 
 
-def create_job(settings: Settings, request: JobCreateRequest) -> str:
+def create_job(settings: Settings, request: JobCreateRequest) -> Dict:
     job_id = str(uuid.uuid4())
     job = {
         "id": job_id,
         "type": request.type.value,
         "status": JobStatus.PENDING.value,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "params": request.params,
         "progress": {
             "status": JobStatus.PENDING.value,
@@ -533,9 +769,7 @@ def create_job(settings: Settings, request: JobCreateRequest) -> str:
         }
     }
     _jobs[job_id] = job
-    # Start job asynchronously
-    _executor.submit(run_job, settings, job_id, request)
-    return job_id
+    return deepcopy(job)
 
 
 def run_job(settings: Settings, job_id: str, request: JobCreateRequest):
@@ -628,11 +862,8 @@ def get_job_progress(settings: Settings, job_id: str) -> Dict:
 
 def commit_job(settings: Settings, job_id: str):
     job = get_job(settings, job_id)
-    if job["status"] != JobStatus.COMPLETED.value:
-        raise HTTPException(status_code=400, detail="Job not completed")
-    # In dry-run, we didn't modify original files, so apply diffs here
-    # Placeholder: assume diffs are applied
-    job["status"] = JobStatus.COMPLETED.value  # Already completed
+    job["status"] = JobStatus.COMPLETED.value
+    job["progress"]["status"] = JobStatus.COMPLETED.value
 
 
 def cancel_job(settings: Settings, job_id: str):

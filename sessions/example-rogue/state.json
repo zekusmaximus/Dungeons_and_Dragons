@@ -1,14 +1,30 @@
 {
   "character": "example-rogue",
-  "turn": 0,
+  "turn": 14,
   "scene_id": "init",
   "location": "CityGate",
-  "hp": 21,
+  "hp": 17,
   "conditions": [],
-  "flags": {},
-  "log_index": 0,
+  "flags": {
+    "preview": 2
+  },
+  "log_index": 4,
+  "level": 3,
+  "xp": 0,
+  "inventory": [
+    "Rapier",
+    "Shortbow (20 arrows)",
+    "Leather armor",
+    "Thieves' tools",
+    "Burglar's pack",
+    "Cloak with hidden pocket"
+  ],
+  "conditions_detail": null,
   "world": "default",
-  "hex": {"q": 0, "r": 0},
+  "hex": {
+    "q": 0,
+    "r": 0
+  },
   "time": "2023-01-01T00:00:00Z",
   "weather": "clear",
   "travel_pace": "normal",

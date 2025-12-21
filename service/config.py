@@ -1,7 +1,11 @@
 from functools import lru_cache
 from pathlib import Path
-from pydantic_settings import BaseSettings
 from typing import Optional
+
+try:  # pragma: no cover - fallback when dependency unavailable
+    from pydantic_settings import BaseSettings
+except ImportError:  # pragma: no cover
+    from pydantic import BaseModel as BaseSettings
 
 
 class Settings(BaseSettings):

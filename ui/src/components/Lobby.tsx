@@ -31,7 +31,7 @@ const fetchAdventureHooks = async (): Promise<AdventureHook[]> => {
 
 interface LobbyProps {
   onSelectSession: (slug: string) => void;
-  onNewAdventure: (hookId: string) => void;
+  onNewAdventure: (hookId: string) => void | Promise<void>;
 }
 
 const Lobby: React.FC<LobbyProps> = ({ onSelectSession, onNewAdventure }) => {

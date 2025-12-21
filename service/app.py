@@ -1,11 +1,12 @@
 from typing import Optional, List, Dict
 from datetime import datetime
+from http import HTTPStatus
 import json
+import re
 
 import uuid
 
 from fastapi import Depends, FastAPI, Query, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .config import Settings, get_settings
@@ -16,7 +17,7 @@ from .models import (
     LockClaim, LockInfo, TurnResponse, PreviewRequest, PreviewResponse,
     FileDiff, EntropyPlan, CommitRequest, CommitResponse, SessionState,
     JobCreateRequest, JobResponse, JobProgress, JobCommitRequest,
-    CommitSummary, DiffResponse, EntropyHistoryEntry, EventType, ServerSentEvent
+    CommitSummary, DiffResponse, EntropyHistoryEntry
 )
 from .adventure_hooks import AdventureHooksService, get_adventure_hooks_service
 from .auto_save import AutoSaveSystem, get_auto_save_system
@@ -41,8 +42,9 @@ class LLMNarrativeRequest(BaseModel):
 
 class LLMNarrativeResponse(BaseModel):
     narrative: str
-    tokens_used: int
+    tokens_used: Optional[int] = None
     model: str
+    usage: Optional[Dict[str, int]] = None
 
 
 class LLMConfigRequest(BaseModel):
@@ -58,6 +60,16 @@ class LLMConfigResponse(BaseModel):
     temperature: float
     max_tokens: int
     source: str
+
+
+class NewSessionRequest(BaseModel):
+    hook_id: Optional[str] = None
+    template_slug: str = "example-rogue"
+    slug: Optional[str] = None
+
+
+class SessionCreateResponse(BaseModel):
+    slug: str
 
 
 def get_settings_dep() -> Settings:
@@ -82,6 +94,28 @@ def get_schema(schema_name: str, settings: Settings = Depends(get_settings_dep))
 def list_sessions(settings: Settings = Depends(get_settings_dep)) -> List[SessionSummary]:
     sessions_data = storage.list_sessions(settings)
     return [SessionSummary(**s) for s in sessions_data]
+
+
+def _slugify_seed(seed: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "-", seed).strip("-").lower()
+    return cleaned or "adventure"
+
+
+@app.post("/sessions", status_code=201)
+def create_session(request: NewSessionRequest, settings: Settings = Depends(get_settings_dep)) -> SessionCreateResponse:
+    base = _slugify_seed(request.slug or request.hook_id or "adventure")
+    candidate = base
+    suffix = 1
+    while True:
+        try:
+            created = storage.create_session(settings, candidate, request.template_slug)
+            return SessionCreateResponse(slug=created)
+        except HTTPException as exc:
+            if exc.status_code == HTTPStatus.CONFLICT:
+                candidate = f"{base}-{suffix}"
+                suffix += 1
+                continue
+            raise
 
 
 @app.get("/sessions/{slug}/state")
@@ -324,7 +358,7 @@ def release_lock(slug: str, settings: Settings = Depends(get_settings_dep)):
 
 @app.post("/sessions/{slug}/turn/preview")
 def preview_turn(slug: str, request: PreviewRequest, settings: Settings = Depends(get_settings_dep)) -> PreviewResponse:
-    preview_id, diffs, entropy_plan = storage.create_preview(settings, slug, request.response)
+    preview_id, diffs, entropy_plan = storage.create_preview(settings, slug, request)
     file_diffs = [FileDiff(path=d["path"], changes=d["changes"]) for d in diffs]
     ep = EntropyPlan(indices=entropy_plan["indices"], usage=entropy_plan["usage"])
     return PreviewResponse(id=preview_id, diffs=file_diffs, entropy_plan=ep)
@@ -332,72 +366,49 @@ def preview_turn(slug: str, request: PreviewRequest, settings: Settings = Depend
 
 @app.post("/sessions/{slug}/turn/commit")
 def commit_turn(slug: str, request: CommitRequest, settings: Settings = Depends(get_settings_dep)) -> CommitResponse:
-    state, log_indices = storage.commit_preview(settings, slug, request.preview_id)
+    state, log_indices = storage.commit_preview(settings, slug, request.preview_id, request.lock_owner)
     session_state = SessionState(**state)
     return CommitResponse(state=session_state, log_indices=log_indices)
 
 
 @app.post("/jobs/explore")
 def create_explore_job(request: JobCreateRequest, settings: Settings = Depends(get_settings_dep)) -> JobResponse:
-    if request.type.value != "explore":
-        raise HTTPException(status_code=400, detail="Invalid job type")
-    job_id = storage.create_job(settings, request)
-    job = storage.get_job(settings, job_id)
-    return JobResponse(**job)
+    raise HTTPException(status_code=501, detail="Job automation is disabled. Run the CLI tools directly under a session lock.")
 
 
 @app.post("/jobs/resolve-encounter")
 def create_resolve_encounter_job(request: JobCreateRequest, settings: Settings = Depends(get_settings_dep)) -> JobResponse:
-    if request.type.value != "resolve-encounter":
-        raise HTTPException(status_code=400, detail="Invalid job type")
-    job_id = storage.create_job(settings, request)
-    job = storage.get_job(settings, job_id)
-    return JobResponse(**job)
+    raise HTTPException(status_code=501, detail="Job automation is disabled. Run the CLI tools directly under a session lock.")
 
 
 @app.post("/jobs/loot")
 def create_loot_job(request: JobCreateRequest, settings: Settings = Depends(get_settings_dep)) -> JobResponse:
-    if request.type.value != "loot":
-        raise HTTPException(status_code=400, detail="Invalid job type")
-    job_id = storage.create_job(settings, request)
-    job = storage.get_job(settings, job_id)
-    return JobResponse(**job)
+    raise HTTPException(status_code=501, detail="Job automation is disabled. Run the CLI tools directly under a session lock.")
 
 
 @app.post("/jobs/downtime")
 def create_downtime_job(request: JobCreateRequest, settings: Settings = Depends(get_settings_dep)) -> JobResponse:
-    if request.type.value != "downtime":
-        raise HTTPException(status_code=400, detail="Invalid job type")
-    job_id = storage.create_job(settings, request)
-    job = storage.get_job(settings, job_id)
-    return JobResponse(**job)
+    raise HTTPException(status_code=501, detail="Job automation is disabled. Run the CLI tools directly under a session lock.")
 
 
 @app.post("/jobs/quest/init")
 def create_quest_init_job(request: JobCreateRequest, settings: Settings = Depends(get_settings_dep)) -> JobResponse:
-    if request.type.value != "quest-init":
-        raise HTTPException(status_code=400, detail="Invalid job type")
-    job_id = storage.create_job(settings, request)
-    job = storage.get_job(settings, job_id)
-    return JobResponse(**job)
+    raise HTTPException(status_code=501, detail="Job automation is disabled. Run the CLI tools directly under a session lock.")
 
 
 @app.get("/jobs/{job_id}")
 def get_job_progress(job_id: str, settings: Settings = Depends(get_settings_dep)) -> JobProgress:
-    progress = storage.get_job_progress(settings, job_id)
-    return JobProgress(**progress)
+    raise HTTPException(status_code=501, detail="Job automation is disabled.")
 
 
 @app.post("/jobs/{job_id}/commit")
-def commit_job(job_id: str, request: JobCommitRequest, settings: Settings = Depends(get_settings_dep)):
-    storage.commit_job(settings, job_id)
-    return {"message": "Job committed"}
+def commit_job(job_id: str, settings: Settings = Depends(get_settings_dep)):
+    raise HTTPException(status_code=501, detail="Job automation is disabled.")
 
 
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str, settings: Settings = Depends(get_settings_dep)):
-    storage.cancel_job(settings, job_id)
-    return {"message": "Job cancelled"}
+    raise HTTPException(status_code=501, detail="Job automation is disabled.")
 
 
 @app.get("/entropy")
@@ -478,15 +489,17 @@ async def generate_narrative(
     settings: Settings = Depends(get_settings_dep)
 ) -> LLMNarrativeResponse:
     effective = get_effective_llm_config(settings)
-    narrative = await call_llm_api(
+    result = await call_llm_api(
         settings,
         request.prompt,
         request.context,
         request.max_tokens
     )
+    usage = result.get("usage")
     return LLMNarrativeResponse(
-        narrative=narrative,
-        tokens_used=len(narrative.split()),  # Simple word count as proxy
+        narrative=result["content"],
+        tokens_used=usage.get("total_tokens") if usage else None,
+        usage=usage,
         model=effective.model
     )
 
@@ -514,16 +527,18 @@ async def generate_scene_narrative(
         context.update(request.context)
     
     effective = get_effective_llm_config(settings)
-    narrative = await call_llm_api(
+    result = await call_llm_api(
         settings,
         request.prompt,
         context,
         request.max_tokens
     )
+    usage = result.get("usage")
     
     return LLMNarrativeResponse(
-        narrative=narrative,
-        tokens_used=len(narrative.split()),
+        narrative=result["content"],
+        tokens_used=usage.get("total_tokens") if usage else None,
+        usage=usage,
         model=effective.model
     )
 
@@ -1011,6 +1026,15 @@ class AutoSaveStatusResponse(BaseModel):
 
 class ManualSaveRequest(BaseModel):
     save_name: str = "manual"
+    lock_owner: Optional[str] = None
+
+
+def _require_save_lock(slug: str, settings: Settings, owner: Optional[str]):
+    lock_info = storage.get_lock_info(settings, slug)
+    if lock_info is None:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail="Lock required to create or restore a save")
+    if owner and lock_info.owner != owner:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail="Lock owned by another actor")
 
 
 @app.get("/sessions/{slug}/auto-save/status", tags=["AutoSave"], summary="Get auto-save status")
@@ -1041,8 +1065,9 @@ def stop_auto_save(slug: str):
 
 
 @app.post("/sessions/{slug}/auto-save/perform", tags=["AutoSave"], summary="Perform immediate auto-save")
-def perform_auto_save(slug: str):
+def perform_auto_save(slug: str, lock_owner: Optional[str] = None, settings: Settings = Depends(get_settings_dep)):
     """Perform an immediate auto-save"""
+    _require_save_lock(slug, settings, lock_owner)
     auto_save = get_auto_save_system(slug)
     success = auto_save.perform_auto_save()
     
@@ -1053,8 +1078,9 @@ def perform_auto_save(slug: str):
 
 
 @app.post("/sessions/{slug}/save", tags=["AutoSave"], summary="Perform manual save")
-def manual_save(slug: str, request: ManualSaveRequest):
+def manual_save(slug: str, request: ManualSaveRequest, settings: Settings = Depends(get_settings_dep)):
     """Perform a manual save"""
+    _require_save_lock(slug, settings, request.lock_owner)
     auto_save = get_auto_save_system(slug)
     result = auto_save.manual_save(request.save_name)
     
@@ -1090,120 +1116,9 @@ def get_save_info(slug: str, save_id: str):
 
 
 @app.post("/sessions/{slug}/saves/{save_id}/restore", tags=["AutoSave"], summary="Restore a save")
-def restore_save(slug: str, save_id: str):
+def restore_save(slug: str, save_id: str, lock_owner: Optional[str] = None, settings: Settings = Depends(get_settings_dep)):
     """Restore a save (placeholder - actual implementation would be more complex)"""
-    auto_save = get_auto_save_system(slug)
-    result = auto_save.restore_save(save_id)
-    
-    if result['success']:
-        return {
-            "message": "Save restoration initiated",
-            "note": result['message']
-        }
-    else:
-        raise HTTPException(status_code=500, detail=f"Restore failed: {result['error']}")
-
-
-# Auto-Save System Endpoints
-class SaveResponse(BaseModel):
-    save_id: str
-    session_slug: str
-    timestamp: str
-    save_type: str
-    saved_files: List[str]
-
-
-class AutoSaveStatusResponse(BaseModel):
-    running: bool
-    save_interval: int
-    last_save_time: float
-    save_count: int
-    next_save_in: float
-
-
-class ManualSaveRequest(BaseModel):
-    save_name: str = "manual"
-
-
-@app.get("/sessions/{slug}/auto-save/status", tags=["AutoSave"], summary="Get auto-save status")
-def get_auto_save_status(slug: str):
-    """Get current auto-save status"""
-    auto_save = get_auto_save_system(slug)
-    status = auto_save.get_auto_save_status()
-    
-    return AutoSaveStatusResponse(**status)
-
-
-@app.post("/sessions/{slug}/auto-save/start", tags=["AutoSave"], summary="Start auto-save")
-def start_auto_save(slug: str):
-    """Start the auto-save system"""
-    auto_save = get_auto_save_system(slug)
-    auto_save.start_auto_save()
-    
-    return {"message": "Auto-save started successfully"}
-
-
-@app.post("/sessions/{slug}/auto-save/stop", tags=["AutoSave"], summary="Stop auto-save")
-def stop_auto_save(slug: str):
-    """Stop the auto-save system"""
-    auto_save = get_auto_save_system(slug)
-    auto_save.stop_auto_save()
-    
-    return {"message": "Auto-save stopped successfully"}
-
-
-@app.post("/sessions/{slug}/auto-save/perform", tags=["AutoSave"], summary="Perform immediate auto-save")
-def perform_auto_save(slug: str):
-    """Perform an immediate auto-save"""
-    auto_save = get_auto_save_system(slug)
-    success = auto_save.perform_auto_save()
-    
-    if success:
-        return {"message": "Auto-save performed successfully"}
-    else:
-        raise HTTPException(status_code=500, detail="Auto-save failed")
-
-
-@app.post("/sessions/{slug}/save", tags=["AutoSave"], summary="Perform manual save")
-def manual_save(slug: str, request: ManualSaveRequest):
-    """Perform a manual save"""
-    auto_save = get_auto_save_system(slug)
-    result = auto_save.manual_save(request.save_name)
-    
-    if result['success']:
-        return {
-            "message": "Manual save performed successfully",
-            "save_id": result['save_id'],
-            "timestamp": result['timestamp']
-        }
-    else:
-        raise HTTPException(status_code=500, detail=f"Manual save failed: {result['error']}")
-
-
-@app.get("/sessions/{slug}/saves", tags=["AutoSave"], summary="Get save history")
-def get_save_history(slug: str, limit: int = Query(10, ge=1, le=50)):
-    """Get auto-save history"""
-    auto_save = get_auto_save_system(slug)
-    saves = auto_save.get_save_history(limit)
-    
-    return [SaveResponse(**save) for save in saves]
-
-
-@app.get("/sessions/{slug}/saves/{save_id}", tags=["AutoSave"], summary="Get save information")
-def get_save_info(slug: str, save_id: str):
-    """Get information about a specific save"""
-    auto_save = get_auto_save_system(slug)
-    save_info = auto_save.get_save_info(save_id)
-    
-    if not save_info:
-        raise HTTPException(status_code=404, detail="Save not found")
-    
-    return save_info
-
-
-@app.post("/sessions/{slug}/saves/{save_id}/restore", tags=["AutoSave"], summary="Restore a save")
-def restore_save(slug: str, save_id: str):
-    """Restore a save (placeholder - actual implementation would be more complex)"""
+    _require_save_lock(slug, settings, lock_owner)
     auto_save = get_auto_save_system(slug)
     result = auto_save.restore_save(save_id)
     
@@ -1218,26 +1133,5 @@ def restore_save(slug: str, save_id: str):
 
 @app.get("/events/{slug}", tags=["Observability"], summary="SSE endpoint for real-time session updates")
 def session_events(slug: str, settings: Settings = Depends(get_settings_dep)):
-    """SSE endpoint for real-time updates."""
-    def event_generator():
-        import asyncio
-        # Placeholder: yield mock events every few seconds
-        count = 0
-        while True:
-            if count % 10 == 0:
-                event = ServerSentEvent(
-                    type=EventType.TRANSCRIPT_UPDATE,
-                    data={"tail": ["New transcript line"]},
-                    timestamp=datetime.utcnow()
-                )
-                yield f"data: {event.json()}\n\n"
-            elif count % 20 == 0:
-                event = ServerSentEvent(
-                    type=EventType.LOCK_CLAIMED,
-                    data={"owner": "user"},
-                    timestamp=datetime.utcnow()
-                )
-                yield f"data: {event.json()}\n\n"
-            count += 1
-            asyncio.sleep(1)  # Wait 1 second
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    """SSE endpoint is currently disabled pending deterministic event stream design."""
+    raise HTTPException(status_code=HTTPStatus.NOT_IMPLEMENTED, detail="Server-sent events are not available yet.")

@@ -45,8 +45,8 @@ Key pillars:
 
 ### Creating Your First Session
 1. Launch the UI to see the Lobby component.
-2. Select the shipped **example-rogue** session to begin play. The "New Adventure" flow currently reuses this template.
-3. To create a new session manually, copy `sessions/example-rogue` to a new slug, duplicate `data/characters/example-rogue.json` to `data/characters/<slug>.json`, reset `state.json` to turn `0`, and clear `transcript.md`/`changelog.md` except for initialization text.
+2. Select the shipped **example-rogue** session to begin play. The "New Adventure" button now POSTs `/api/sessions` to clone the template into a fresh slug and refreshes the session list automatically.
+3. Manual alternative: copy `sessions/example-rogue` to a new slug, duplicate `data/characters/example-rogue.json` to `data/characters/<slug>.json`, reset `state.json` to turn `0`, and clear `transcript.md`/`changelog.md` except for initialization text.
 4. Configure your LLM key from the Narrative Dashboard → Settings → LLM Configuration, or set the `DM_SERVICE_LLM_API_KEY` environment variable before starting the backend. The POST `/api/llm/config` endpoint persists overrides to `.dm_llm_config.json` and never echoes your key.
 
 ## Gameplay Mechanics
@@ -63,13 +63,17 @@ Key pillars:
 - The UI surfaces the current scene from `turn.md` and state information from `state.json`.
 - `/sessions/{slug}/llm/narrate` injects session and character context into the LLM call.
 
+### Turn Preview & Commit
+- `/sessions/{slug}/turn/preview` validates the current state, computes a diff, and reserves deterministic entropy indices without advancing `log_index`.
+- `/sessions/{slug}/turn/commit` re-checks the preview base hash/turn, consumes the reserved indices, appends transcript/changelog entries, and increments `turn` atomically. Stale previews return `409 Conflict`.
+
 ### Downtime & Jobs
-- Jobs endpoints (explore/loot/downtime/etc.) exist but currently run placeholder flows; treat them as previews rather than production automation.
+- Jobs endpoints (explore/loot/downtime/etc.) are gated with `501 Not Implemented`; run the CLI tools manually under a session lock if needed.
 
 ## UI Components
 
 ### Lobby
-Lists existing campaigns. The "New Adventure" button currently reuses the template session; manual session creation is recommended until full flow lands.
+Lists existing campaigns. The "New Adventure" button clones the template session via POST `/api/sessions` and opens it immediately.
 
 ### Narrative Dashboard
 Shows current scene text, quick actions, transcript/changelog panels, and links to map and character views.

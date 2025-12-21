@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Lobby from './components/Lobby';
 import NarrativeDashboard from './components/NarrativeDashboard';
@@ -43,23 +43,26 @@ const globalCSS = `
 }
 `;
 
-const queryClient = new QueryClient();
-
 const App: React.FC = () => {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false);
 
   const handleNewAdventure = async (hookId: string) => {
-    // In a real implementation, this would:
-    // 1. Create a new session based on the adventure hook
-    // 2. Set up the initial state and scene
-    // 3. Navigate to the new session
-    
-    console.log("Starting new adventure with hook:", hookId);
-    
-    // For now, we'll just use a default session
-    // In a real app, you would create a new session ID and initialize it
-    setSelectedSession('example-rogue'); // This would be the new session
+    try {
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hook_id: hookId }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create a new adventure');
+      }
+      const data = await response.json();
+      setSelectedSession(data.slug);
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    } catch (err) {
+      console.error('Unable to start new adventure', err);
+    }
   };
 
   const handleApplyAccessibilitySettings = (settings: any) => {
