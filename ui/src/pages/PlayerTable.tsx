@@ -64,19 +64,19 @@ type RollType = 'ability_check' | 'saving_throw' | 'attack' | 'damage' | 'initia
 type AdvantageType = 'advantage' | 'disadvantage' | 'normal' | undefined;
 
 interface RollRequest {
-  type: RollType;
+  kind: RollType;
   ability?: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
   skill?: string;
   dc?: number;
   advantage?: AdvantageType;
-  notes?: string;
+  reason?: string;
 }
 
 interface RollResult {
+  d20: number[];
   total: number;
-  rolls: number[];
-  modifier: number;
-  label: string;
+  breakdown: string;
+  text: string;
 }
 
 const fetchBundle = async (slug: string): Promise<PlayerBundle> => {
@@ -144,11 +144,11 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
 
   const formatRollLabel = (req: RollRequest) => {
     const parts = [];
-    if (req.type === 'ability_check') parts.push('Ability check');
-    if (req.type === 'saving_throw') parts.push('Saving throw');
-    if (req.type === 'attack') parts.push('Attack roll');
-    if (req.type === 'damage') parts.push('Damage roll');
-    if (req.type === 'initiative') parts.push('Initiative');
+    if (req.kind === 'ability_check') parts.push('Ability check');
+    if (req.kind === 'saving_throw') parts.push('Saving throw');
+    if (req.kind === 'attack') parts.push('Attack roll');
+    if (req.kind === 'damage') parts.push('Damage roll');
+    if (req.kind === 'initiative') parts.push('Initiative');
     if (req.skill) parts.push(req.skill);
     if (req.ability) parts.push(`(${req.ability})`);
     if (req.advantage && req.advantage !== 'normal') parts.push(req.advantage);
@@ -160,22 +160,24 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
     if (!rollRequest) return;
     setError(null);
     try {
-      const response = await fetch(`/api/sessions/${sessionSlug}/player/roll`, {
+      const response = await fetch(`/api/sessions/${sessionSlug}/roll`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rollRequest),
+        body: JSON.stringify({
+          kind: rollRequest.kind,
+          ability: rollRequest.ability,
+          skill: rollRequest.skill,
+          advantage: rollRequest.advantage,
+        }),
       });
       const data: RollResult = await response.json();
       if (!response.ok) {
         throw new Error((data as any).detail);
       }
       setRollResult(data);
-      const modText = data.modifier ? ` ${data.modifier >= 0 ? '+' : '-'} ${Math.abs(data.modifier)}` : '';
-      const baseText = `${data.rolls.join('/')} ${modText}`.trim();
-      const fill = `I roll ${data.label}: ${baseText} = ${data.total}`;
-      setInput(fill);
+      setInput(data.text);
     } catch (e: any) {
-      setError('The DM couldn’t respond. Check your LLM settings.');
+      setError('The DM could not respond. Try again in a moment.');
     }
   };
 
@@ -211,11 +213,26 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
       queryClient.invalidateQueries({ queryKey: ['player-bundle', sessionSlug] });
       refetch();
     } catch (e: any) {
-      setError('The DM couldn’t respond. Check your LLM settings.');
+      setError('The DM could not respond. Try again in a moment.');
     } finally {
       setSending(false);
     }
   };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!rollRequest) return;
+      if (event.key !== 'r' && event.key !== 'R') return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable)) {
+        return;
+      }
+      event.preventDefault();
+      handleRoll();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [rollRequest, handleRoll]);
 
   const displaySuggestions = suggestions.length ? suggestions.slice(0, 5) : [
     'Survey the area for clues',
@@ -258,7 +275,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
               <div>
                 <div className="roll-title">Roll requested</div>
                 <div className="roll-desc">{formatRollLabel(rollRequest)}</div>
-                {rollRequest.notes && <div className="subtle">{rollRequest.notes}</div>}
+                {rollRequest.reason && <div className="subtle">{rollRequest.reason}</div>}
               </div>
               <div className="roll-actions">
                 <button className="primary" onClick={handleRoll}>Roll</button>
@@ -266,13 +283,14 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
               </div>
               {rollResult && (
                 <div className="roll-result">
-                  Result: {rollResult.total} (rolls {rollResult.rolls.join('/')} {rollResult.modifier ? `${rollResult.modifier >= 0 ? '+' : '-'}${Math.abs(rollResult.modifier)}` : ''})
+                  Result: {rollResult.text}
                 </div>
               )}
             </div>
           )}
           <div className="composer">
             <label>What do you do?</label>
+            {rollRequest && <div className="subtle">The DM is waiting for a roll.</div>}
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
