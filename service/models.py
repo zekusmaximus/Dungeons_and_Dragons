@@ -265,6 +265,18 @@ class DMNarration(BaseModel):
     roll_request: Optional["RollRequest"] = None
 
 
+class RollLog(BaseModel):
+    kind: Literal["ability_check", "saving_throw", "attack", "damage", "initiative"]
+    ability: Optional[Literal["STR", "DEX", "CON", "INT", "WIS", "CHA"]] = None
+    skill: Optional[str] = None
+    advantage: Optional[Literal["advantage", "disadvantage", "normal"]] = "normal"
+    dc: Optional[int] = Field(default=None, ge=1)
+    total: int
+    d20: List[int]
+    breakdown: str
+    text: str
+
+
 class TurnRecord(BaseModel):
     turn: int
     player_intent: str
@@ -272,6 +284,7 @@ class TurnRecord(BaseModel):
     consequence_echo: str
     dm: DMNarration
     created_at: datetime
+    rolls: Optional[List[RollLog]] = None
 
 
 class CommitAndNarrateResponse(BaseModel):
@@ -337,19 +350,23 @@ class PlayerTurnResponse(BaseModel):
 
 
 class RollRequest(BaseModel):
-    type: Literal["ability_check", "saving_throw", "attack", "damage", "initiative"]
+    kind: Literal["ability_check", "saving_throw", "attack", "damage", "initiative"] = Field(
+        validation_alias="type"
+    )
     ability: Optional[Literal["STR", "DEX", "CON", "INT", "WIS", "CHA"]] = None
     skill: Optional[str] = None
     dc: Optional[int] = Field(default=None, ge=1)
     advantage: Optional[Literal["advantage", "disadvantage", "normal"]] = "normal"
-    notes: Optional[str] = None
+    reason: Optional[str] = Field(default=None, validation_alias="notes")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class RollResult(BaseModel):
+    d20: List[int]
     total: int
-    rolls: List[int]
-    modifier: int
-    label: str
+    breakdown: str
+    text: str
 
 # Resolve forward references for nested models
 DMNarration.model_rebuild()

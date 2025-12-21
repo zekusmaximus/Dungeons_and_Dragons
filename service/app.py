@@ -765,16 +765,21 @@ async def player_opening_scene(
     )
 
 
-@app.post("/sessions/{slug}/player/roll")
+@app.post("/sessions/{slug}/roll")
 def player_roll(slug: str, request: RollRequest, settings: Settings = Depends(get_settings_dep)) -> RollResult:
     try:
         return storage.perform_roll(settings, slug, request)
     except HTTPException as exc:
         if exc.status_code >= 500:
             raise exc
-        raise HTTPException(status_code=exc.status_code, detail="The DM couldn't respond. Check your LLM settings.") from exc
+        raise HTTPException(status_code=exc.status_code, detail="The DM couldn't respond. Try again in a moment.") from exc
     except Exception:
-        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="The DM couldn't respond. Check your LLM settings.")
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="The DM couldn't respond. Try again in a moment.")
+
+
+@app.post("/sessions/{slug}/player/roll")
+def player_roll_legacy(slug: str, request: RollRequest, settings: Settings = Depends(get_settings_dep)) -> RollResult:
+    return player_roll(slug, request, settings)
 
 
 @app.post("/sessions/{slug}/player/turn")

@@ -290,14 +290,93 @@ def test_player_turn_endpoint(client):
 def test_player_roll_deterministic(client):
     slug = client.post("/sessions", json={"slug": "roll-deterministic"}).json()["slug"]
     response = client.post(
-        f"/sessions/{slug}/player/roll",
-        json={"type": "ability_check", "ability": "DEX"},
+        f"/sessions/{slug}/roll",
+        json={"kind": "ability_check", "ability": "DEX"},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["total"] == data["rolls"][0] + data["modifier"]
+    assert data["total"] == data["d20"][0] + 3
     # First entropy line uses d20=12 and character dex modifier +3
     assert data["total"] == 15
+    assert set(data.keys()) == {"d20", "total", "breakdown", "text"}
+
+
+def test_player_roll_proficiency_applied(client):
+    slug = client.post("/sessions", json={"slug": "roll-prof"}).json()["slug"]
+    client.post(f"/sessions/{slug}/character", json=_character_payload())
+
+    response = client.post(
+        f"/sessions/{slug}/roll",
+        json={"kind": "ability_check", "skill": "athletics"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["d20"][0] == 12
+    assert "PROF" in data["breakdown"]
+    assert data["total"] == 16
+
+    response = client.post(
+        f"/sessions/{slug}/roll",
+        json={"kind": "ability_check", "skill": "stealth"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["d20"][0] == 7
+    assert "PROF" not in data["breakdown"]
+    assert data["total"] == 9
+
+
+def test_player_roll_flow_smoke(monkeypatch, client):
+    slug = client.post("/sessions", json={"slug": "roll-flow"}).json()["slug"]
+    client.post(f"/sessions/{slug}/character", json=_character_payload())
+    client.post(f"/sessions/{slug}/player/opening", json={"hook": "Urban mystery"})
+
+    call_count = {"n": 0}
+
+    async def fake_dm(settings, session_slug, state, before_state, player_intent, diff, include_discovery=False):
+        call_count["n"] += 1
+        choices = [
+            DMChoice(id="A", text="Talk", intent_tag="talk", risk="low"),
+            DMChoice(id="B", text="Sneak", intent_tag="sneak", risk="medium"),
+            DMChoice(id="C", text="Fight", intent_tag="fight", risk="high"),
+            DMChoice(id="D", text="Investigate", intent_tag="investigate", risk="medium"),
+        ]
+        if call_count["n"] == 1:
+            dm = DMNarration(
+                narration="Test scene. Roll now.",
+                recap="recap",
+                stakes="stakes",
+                choices=choices,
+                roll_request=RollRequest(kind="ability_check", ability="DEX", skill="stealth", dc=12),
+            )
+            return dm, None
+        dm = DMNarration(
+            narration="Resolution lands. What do you do?",
+            recap="recap",
+            stakes="stakes",
+            choices=choices,
+        )
+        return dm, None
+
+    monkeypatch.setattr(app_module, "generate_dm_narration", fake_dm)
+
+    response = client.post(f"/sessions/{slug}/player/turn", json={"action": "I test"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["roll_request"]["kind"] == "ability_check"
+
+    roll_response = client.post(
+        f"/sessions/{slug}/roll",
+        json={"kind": "ability_check", "ability": "DEX", "skill": "stealth"},
+    )
+    assert roll_response.status_code == 200
+    action_text = roll_response.json()["text"]
+
+    response = client.post(f"/sessions/{slug}/player/turn", json={"action": action_text})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["roll_request"] is None
+    assert "Resolution" in data["narration"]["narration"]
 
 
 def test_player_turn_includes_roll_request(monkeypatch, client):
@@ -315,7 +394,7 @@ def test_player_turn_includes_roll_request(monkeypatch, client):
             recap="recap",
             stakes="stakes",
             choices=choices,
-            roll_request=RollRequest(type="ability_check", ability="DEX", skill="stealth", dc=12),
+            roll_request=RollRequest(kind="ability_check", ability="DEX", skill="stealth", dc=12, reason="Test roll"),
         )
         return dm, None
 
@@ -324,5 +403,5 @@ def test_player_turn_includes_roll_request(monkeypatch, client):
     response = client.post(f"/sessions/{slug}/player/turn", json={"action": "I test"})
     assert response.status_code == 200
     data = response.json()
-    assert data["roll_request"]["type"] == "ability_check"
+    assert data["roll_request"]["kind"] == "ability_check"
     assert data["roll_request"]["ability"] == "DEX"

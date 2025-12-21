@@ -160,9 +160,17 @@ def _sanitize_dm_payload(
         recap = f"Turn {state.get('turn', 0)} recap at {state.get('location', 'the field')}."
     if not stakes:
         stakes = "Each option carries a cost; failure introduces new pressure."
-    if not narration.rstrip().endswith("What do you do?"):
+    has_roll_request = bool(working.get("roll_request"))
+    if has_roll_request:
         narration = narration.rstrip()
-        narration = f"{narration} What do you do?"
+        if narration.endswith("What do you do?"):
+            narration = narration[: -len("What do you do?")].rstrip()
+        if not narration.endswith("Roll now."):
+            narration = f"{narration} Roll now."
+    else:
+        if not narration.rstrip().endswith("What do you do?"):
+            narration = narration.rstrip()
+            narration = f"{narration} What do you do?"
 
     raw_choices = working.get("choices") if isinstance(working.get("choices"), list) else []
     choices, choices_fallback = _sanitize_choices(raw_choices, state)
@@ -216,6 +224,7 @@ def _enforce_opening_contract(
     defaults = _opening_defaults(state, character, hook_label)
     lower = narration.lower()
     parts = []
+    roll_pending = "roll now." in lower
     if "scene:" in lower:
         parts.append(narration.strip())
     else:
@@ -226,12 +235,17 @@ def _enforce_opening_contract(
         parts.append(f"Immediate problem: {defaults['problem']}")
     if "reason:" not in lower:
         parts.append(f"Reason: {defaults['reason']}")
-    if "question:" not in lower:
+    if "question:" not in lower and not roll_pending:
         parts.append("Question: What do you do?")
     merged = "\n".join(parts).strip()
-    if not merged.endswith("What do you do?"):
-        merged = merged.rstrip()
-        merged = f"{merged} What do you do?"
+    if roll_pending:
+        if not merged.endswith("Roll now."):
+            merged = merged.rstrip()
+            merged = f"{merged} Roll now."
+    else:
+        if not merged.endswith("What do you do?"):
+            merged = merged.rstrip()
+            merged = f"{merged} What do you do?"
     return merged
 
 
@@ -326,11 +340,11 @@ async def generate_dm_narration(
         "  choices: array of 4-5 items with fields {id: A/B/C/D/E, text, intent_tag: talk|sneak|fight|magic|investigate|travel|other, risk: low|medium|high},\n"
         "  discovery_added: optional {title, text},\n"
         "  consequence_echo: optional string summarizing the consequence in 1 line,\n"
-        "  roll_request: optional {type: ability_check|saving_throw|attack|damage|initiative, ability?: STR|DEX|CON|INT|WIS|CHA, skill?: string, dc?: number, advantage?: advantage|disadvantage|normal, notes?: string}\n"
+        "  roll_request: optional {kind: ability_check|saving_throw|attack|damage|initiative, ability?: STR|DEX|CON|INT|WIS|CHA, skill?: string, dc?: number, advantage?: advantage|disadvantage|normal, reason?: string}\n"
         "}.\n"
-        "Rules: concise, grounded in provided state; keep outputs safe; do not add dice unless roll_request is present. Only include roll_request when a roll is actually needed.\n"
+        "Rules: concise, grounded in provided state; keep outputs safe; do not add dice unless roll_request is present. Only include roll_request when a roll is actually needed. If roll_request exists, do not resolve outcomes yet and end the narration with 'Roll now.'.\n"
         "Choice contract: Return 4-5 DISTINCT options. Avoid placeholders like 'continue' or 'do nothing'. Label options with varied intent_tag when possible.\n"
-        "End narration with a direct invitation: What do you do?\n"
+        "End narration with a direct invitation: What do you do? (unless a roll_request is present; then end with 'Roll now.').\n"
         "When possible, include: one safe/low-risk option, one risky/high-stakes option, one clever/indirect option."
     )
     if include_discovery:
@@ -392,11 +406,11 @@ async def generate_opening_narration(
         "  choices: array of 4-5 items with fields {id: A/B/C/D/E, text, intent_tag: talk|sneak|fight|magic|investigate|travel|other, risk: low|medium|high},\n"
         "  discovery_added: optional {title, text},\n"
         "  consequence_echo: optional string summarizing the consequence in 1 line,\n"
-        "  roll_request: optional {type: ability_check|saving_throw|attack|damage|initiative, ability?: STR|DEX|CON|INT|WIS|CHA, skill?: string, dc?: number, advantage?: advantage|disadvantage|normal, notes?: string}\n"
+        "  roll_request: optional {kind: ability_check|saving_throw|attack|damage|initiative, ability?: STR|DEX|CON|INT|WIS|CHA, skill?: string, dc?: number, advantage?: advantage|disadvantage|normal, reason?: string}\n"
         "}.\n"
         "Rules: concise, grounded in provided state; keep outputs safe.\n"
         "Opening contract: narration MUST explicitly state the scene, the immediate problem, why the character is here, "
-        "and an explicit question ending with 'What do you do?'.\n"
+        "and an explicit question ending with 'What do you do?' (unless a roll_request is present; then end with 'Roll now.').\n"
         "Choice contract: return 4-5 DISTINCT options with varied intent_tag when possible."
     )
     if include_discovery:

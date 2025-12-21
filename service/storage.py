@@ -699,6 +699,84 @@ def _ability_modifier(score: Optional[int]) -> int:
     return (score - 10) // 2
 
 
+_SKILL_TO_ABILITY = {
+    "athletics": "STR",
+    "acrobatics": "DEX",
+    "sleight_of_hand": "DEX",
+    "stealth": "DEX",
+    "arcana": "INT",
+    "history": "INT",
+    "investigation": "INT",
+    "nature": "INT",
+    "religion": "INT",
+    "animal_handling": "WIS",
+    "insight": "WIS",
+    "medicine": "WIS",
+    "perception": "WIS",
+    "survival": "WIS",
+    "deception": "CHA",
+    "intimidation": "CHA",
+    "performance": "CHA",
+    "persuasion": "CHA",
+}
+
+
+def _normalize_skill_name(skill: str) -> str:
+    return skill.strip().lower().replace(" ", "_")
+
+
+def _proficiency_bonus(level: Optional[int]) -> int:
+    if not level or level < 1:
+        return 2
+    return 2 + max(0, (level - 1) // 4)
+
+
+def _is_skill_proficient(character: Dict, skill: str) -> bool:
+    profs = character.get("proficiencies") or {}
+    skills = profs.get("skills") if isinstance(profs, dict) else []
+    if not isinstance(skills, list):
+        return False
+    target = _normalize_skill_name(skill)
+    normalized = {_normalize_skill_name(str(item)) for item in skills if isinstance(item, str)}
+    return target in normalized
+
+
+def _display_label(roll_request: RollRequest) -> str:
+    if roll_request.skill:
+        return _normalize_skill_name(roll_request.skill).replace("_", " ").title()
+    if roll_request.ability:
+        return roll_request.ability
+    return roll_request.kind.replace("_", " ").title()
+
+
+def _append_transcript_entry(session_path: Path, text: str) -> None:
+    transcript_path = session_path / "transcript.md"
+    transcript_path.touch(exist_ok=True)
+    with transcript_path.open("a", encoding="utf-8") as handle:
+        handle.write(text.rstrip() + "\n")
+
+
+def _append_roll_to_turn_record(settings: Settings, slug: str, roll_payload: Dict) -> None:
+    session_path = _ensure_session(settings, slug)
+    state = load_state(settings, slug)
+    turn_number = state.get("turn")
+    if turn_number is None:
+        return
+    record_path = session_path / "turns" / f"{turn_number}.json"
+    if not record_path.exists():
+        return
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    rolls = record.get("rolls")
+    if not isinstance(rolls, list):
+        rolls = []
+    rolls.append(roll_payload)
+    record["rolls"] = rolls
+    record_path.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
+
+
 def perform_roll(settings: Settings, slug: str, roll_request: RollRequest) -> RollResult:
     state = load_state(settings, slug)
     character = {}
@@ -720,24 +798,54 @@ def perform_roll(settings: Settings, slug: str, roll_request: RollRequest) -> Ro
     base_roll = max(used_rolls) if roll_request.advantage == "advantage" else min(used_rolls) if roll_request.advantage == "disadvantage" else used_rolls[0]
 
     modifier = 0
-    label = roll_request.skill or roll_request.ability or roll_request.type
-    if roll_request.skill and isinstance(character.get("skills"), dict):
-        skill_key = roll_request.skill.lower().replace(" ", "_")
-        skill_bonus = character["skills"].get(skill_key)
-        if isinstance(skill_bonus, (int, float)):
-            modifier = int(skill_bonus)
-    if modifier == 0 and roll_request.ability:
-        ability_score = _ability_score_from_payload(state, roll_request.ability) or _ability_score_from_payload(character, roll_request.ability)
-        modifier = _ability_modifier(ability_score)
-        label = f"{label} ({roll_request.ability})" if label else roll_request.ability
+    ability = roll_request.ability
+    if not ability and roll_request.skill:
+        ability = _SKILL_TO_ABILITY.get(_normalize_skill_name(roll_request.skill))
+    if not ability and roll_request.kind == "initiative":
+        ability = "DEX"
+
+    ability_score = None
+    if ability:
+        ability_score = _ability_score_from_payload(state, ability) or _ability_score_from_payload(character, ability)
+    ability_mod = _ability_modifier(ability_score)
+    modifier += ability_mod
+
+    prof_bonus = 0
+    if roll_request.skill and _is_skill_proficient(character, roll_request.skill):
+        level = character.get("level") or state.get("level")
+        prof_bonus = _proficiency_bonus(level)
+        modifier += prof_bonus
 
     total = base_roll + modifier
 
     state["log_index"] = next_index
     save_state(settings, slug, state)
 
-    display_label = label or roll_request.type
-    return RollResult(total=total, rolls=used_rolls, modifier=modifier, label=str(display_label))
+    breakdown_parts = [str(base_roll)]
+    if ability:
+        breakdown_parts.append(f"{ability_mod:+d} ({ability})")
+    if prof_bonus:
+        breakdown_parts.append(f"+{prof_bonus} (PROF)")
+    breakdown = " ".join(part.replace("+-", "-") for part in breakdown_parts)
+
+    display_label = _display_label(roll_request)
+    text = f"I roll {display_label}: {breakdown} = {total}"
+
+    roll_payload = {
+        "kind": roll_request.kind,
+        "ability": ability,
+        "skill": roll_request.skill,
+        "advantage": roll_request.advantage,
+        "dc": roll_request.dc,
+        "total": total,
+        "d20": used_rolls,
+        "breakdown": breakdown,
+        "text": text,
+    }
+    _append_transcript_entry(_ensure_session(settings, slug), text)
+    _append_roll_to_turn_record(settings, slug, roll_payload)
+
+    return RollResult(d20=used_rolls, total=total, breakdown=breakdown, text=text)
 def _apply_state_patch(state: Dict, patch: Dict) -> Dict:
     allowed_fields = set(SessionState.model_fields.keys())
     disallowed = {"turn", "log_index"}
