@@ -77,6 +77,7 @@ const TurnConsole: React.FC<TurnConsoleProps> = ({ sessionSlug }) => {
   const [lastDiff, setLastDiff] = useState<string[]>([]);
   const [dmOutput, setDmOutput] = useState<DMNarration | null>(null);
   const queryClient = useQueryClient();
+  const lockOwner = 'user1';
 
   const formatStakesSnippet = (stakes?: string) => {
     if (!stakes) return null;
@@ -124,7 +125,7 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
     mutationFn: () => fetch(`/api/sessions/${sessionSlug}/lock/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner: 'user1', ttl: 300 }),
+      body: JSON.stringify({ owner: lockOwner, ttl: 300 }),
     }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['turn', sessionSlug] }),
   });
@@ -135,24 +136,39 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
   });
 
   const previewMutation = useMutation({
-    mutationFn: (res: string) => fetch(`/api/sessions/${sessionSlug}/turn/preview`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response: res }),
-    }).then(r => r.json()),
+    mutationFn: async (res: string) => {
+      const resp = await fetch(`/api/sessions/${sessionSlug}/turn/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: res, lock_owner: lockOwner }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || 'Preview failed');
+      }
+      return data as PreviewResponse;
+    },
     onMutate: () => {
       setLastConsequence(null);
       setLastDiff([]);
+      setPreview(null);
     },
     onSuccess: (data) => setPreview(data),
   });
 
   const commitMutation = useMutation({
-    mutationFn: (previewId: string) => fetch(`/api/sessions/${sessionSlug}/turn/commit-and-narrate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ preview_id: previewId }),
-    }).then(r => r.json()),
+    mutationFn: async (previewId: string) => {
+      const resp = await fetch(`/api/sessions/${sessionSlug}/turn/commit-and-narrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preview_id: previewId, lock_owner: lockOwner }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || 'Commit failed');
+      }
+      return data as CommitAndNarrateResponse;
+    },
     onSuccess: (data: CommitAndNarrateResponse) => {
       setDmOutput(data.dm);
       setLastDiff(data.turn_record.diff || []);
@@ -165,8 +181,9 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
 
   if (isLoading) return <div>Loading turn...</div>;
 
-  const isLockedByMe = turnData?.lock_status?.owner === 'user1';
+  const isLockedByMe = turnData?.lock_status?.owner === lockOwner;
   const isLockedByOther = turnData?.lock_status && !isLockedByMe;
+  const previewError = previewMutation.error instanceof Error ? previewMutation.error.message : null;
 
   const fallbackChoices: DMChoice[] = [
     { id: 'A', text: `Ask around ${stateData?.location ? `near ${stateData.location}` : 'the area'}`, intent_tag: 'talk', risk: 'low' },
@@ -318,7 +335,7 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
             <div className="preview-box">
               <div className="preview-header">
                 <h4>Preview</h4>
-                <div className="entropy">Entropy: {preview.entropy_plan.usage}</div>
+                <div className="entropy">Entropy: {preview?.entropy_plan?.usage ?? 'n/a'}</div>
               </div>
               <ul>
                 {preview.diffs.map((diff, i) => (
@@ -332,6 +349,10 @@ Consequence echo: If the chosen path fails, introduce a complication instead of 
                 <button onClick={() => setPreview(null)} className="ghost">Cancel</button>
               </div>
             </div>
+          )}
+
+          {previewError && (
+            <div className="error-box">Preview failed: {previewError}</div>
           )}
 
           {lastConsequence && (
@@ -733,6 +754,15 @@ const turnConsoleCSS = `
 .warning {
   color: #b00020;
   margin-top: 6px;
+}
+
+.error-box {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #b00020;
+  background: #ffecec;
+  color: #7a0015;
+  border-radius: 6px;
 }
 `;
 
