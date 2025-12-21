@@ -71,7 +71,7 @@ async def call_llm_api(
     prompt: str,
     context: Optional[Dict] = None,
     max_tokens: Optional[int] = None,
-) -> str:
+) -> Dict[str, Any]:
     config = get_effective_llm_config(settings)
     if not config.api_key:
         raise HTTPException(
@@ -120,7 +120,13 @@ async def call_llm_api(
                 )
                 response.raise_for_status()
                 result = response.json()
-                return result["choices"][0]["message"]["content"].strip()
+                usage = result.get("usage")
+                return {
+                    "content": result["choices"][0]["message"]["content"].strip(),
+                    "usage": {
+                        k: int(v) for k, v in usage.items()
+                    } if isinstance(usage, dict) else None,
+                }
             except httpx.TimeoutException:
                 if attempt < 2:
                     await asyncio.sleep(0.5 * (2**attempt))

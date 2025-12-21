@@ -32,14 +32,21 @@ This repository is a deterministic, file-backed solo D&D experience. A FastAPI b
 - Backend defaults are read from environment variables; POST `/api/llm/config` persists overrides to `.dm_llm_config.json` in the repo root (not committed).
 - The UI never echoes your key; it only reports whether one is configured and which base URL/model are active.
 - Provider calls are sent to `{base_url}/chat/completions` with a system prompt derived from `PROMPTS/dm_v3_contract.md` plus the current session context.
+- Token usage in responses mirrors provider metadata when available; no word-count proxy is used.
 
 ## Deterministic data model
 - **State:** `service/models.py::SessionState` is the canonical schema. Files live under `sessions/<slug>/state.json`.
+- **Turns:** `/sessions/{slug}/turn/preview` validates the current state, computes a JSON diff, and reserves entropy indices without consuming them. `/sessions/{slug}/turn/commit` re-validates against the preview hash/turn, advances `log_index` to consume the reserved entropy, appends transcript/changelog entries, and increments `turn` atomically.
 - **Dice:** `dice/entropy.ndjson` supplies deterministic rolls. See `dice/README.md` for mapping rules and extension instructions.
-- **Auto-save:** Snapshots land under `sessions/<slug>/saves` and `auto_save.json` via the auto-save endpoints.
+- **Auto-save:** Snapshots land under `sessions/<slug>/saves` and `auto_save.json` via the auto-save endpoints. Snapshot creation (`/auto-save/perform`, `/save`, `/saves/{id}/restore`) requires an active session lock owner to avoid concurrent writes.
 
 ## Creating a new session manually
-Copy `sessions/example-rogue` to a new slug and duplicate `data/characters/example-rogue.json` to `data/characters/<slug>.json`. Reset `state.json` to turn `0`, set starting location/HP, and clear `transcript.md`/`changelog.md` except for an initialization entry.
+- Use POST `/api/sessions` (or the "New Adventure" button in the Lobby) to copy the `example-rogue` template into a fresh slug. The endpoint resets `turn`/`log_index`, rewrites transcript/changelog placeholders, and clones the template character JSON under the new slug.
+- Manual option: Copy `sessions/example-rogue` to a new slug and duplicate `data/characters/example-rogue.json` to `data/characters/<slug>.json`. Reset `state.json` to turn `0`, set starting location/HP, and clear `transcript.md`/`changelog.md` except for an initialization entry.
+
+## Disabled surfaces
+- Background job endpoints (`/jobs/*`) are gated and return `501 Not Implemented` to avoid mock entropy.
+- The `/events/{slug}` SSE endpoint is intentionally disabled until a deterministic stream is designed.
 
 ## Licenses and SRD Notice
 Open content follows the SRD and Creative Commons terms documented in `LICENSES/`. Read `NOTICE_SRD.md` for attribution details.

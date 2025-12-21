@@ -1,21 +1,25 @@
 from pathlib import Path
+import shutil
 
 import pytest
 from fastapi.testclient import TestClient
 
-from service.app import app
-from service.config import Settings, get_settings
+from service.app import app, get_settings_dep
+from service.config import Settings
 
 
-@pytest.fixture(scope="module")
-def client():
+@pytest.fixture(scope="function")
+def client(tmp_path_factory):
     # ensure service uses repository root relative to test file
     repo_root = Path(__file__).resolve().parent.parent
+    temp_root = tmp_path_factory.mktemp("repo_copy")
+    for name in ["sessions", "data", "worlds", "dice"]:
+        shutil.copytree(repo_root / name, temp_root / name)
 
     def override_settings():
-        return Settings(repo_root=repo_root)
+        return Settings(repo_root=temp_root)
 
-    app.dependency_overrides[get_settings] = override_settings
+    app.dependency_overrides[get_settings_dep] = override_settings
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
@@ -34,6 +38,18 @@ def test_list_sessions(client):
     assert isinstance(sessions, list)
     slugs = [s["slug"] for s in sessions]
     assert "example-rogue" in slugs
+
+
+def test_create_session_endpoint(client):
+    response = client.post("/sessions", json={"hook_id": "test-hook"})
+    assert response.status_code == 201
+    slug = response.json()["slug"]
+    sessions = client.get("/sessions").json()
+    assert slug in [s["slug"] for s in sessions]
+
+    state = client.get(f"/sessions/{slug}/state").json()
+    assert state["character"] == slug
+    assert state["turn"] == 0
 
 
 def test_state_reads_existing_session(client):
@@ -184,45 +200,20 @@ def test_commit_turn(client):
 
 def test_create_explore_job(client):
     response = client.post("/jobs/explore", json={"type": "explore", "params": {"slug": "example-rogue", "steps": 1, "pace": "normal"}})
-    assert response.status_code == 200
-    job = response.json()
-    assert "id" in job
-    assert job["type"] == "explore"
-    assert job["status"] == "pending"
+    assert response.status_code == 501
+    assert "disabled" in response.json()["detail"]
 
 
 def test_get_job_progress(client):
-    # Create job first
-    create_resp = client.post("/jobs/explore", json={"type": "explore", "params": {"slug": "example-rogue", "steps": 1, "pace": "normal"}})
-    job_id = create_resp.json()["id"]
-
-    response = client.get(f"/jobs/{job_id}")
-    assert response.status_code == 200
-    progress = response.json()
-    assert "status" in progress
-    assert "logs" in progress
-    assert "entropy_usage" in progress
-    assert "diff_preview" in progress
+    response = client.get("/jobs/some-id")
+    assert response.status_code == 501
 
 
 def test_commit_job(client):
-    # Create and wait for completion (in real test, might need to mock or wait)
-    create_resp = client.post("/jobs/explore", json={"type": "explore", "params": {"slug": "example-rogue", "steps": 1, "pace": "normal"}})
-    job_id = create_resp.json()["id"]
-
-    # Assume job completes quickly for test
-    import time
-    time.sleep(2)  # Wait for job to run
-
-    response = client.post(f"/jobs/{job_id}/commit")
-    assert response.status_code == 200
-    assert response.json() == {"message": "Job committed"}
+    response = client.post("/jobs/any/commit")
+    assert response.status_code == 501
 
 
 def test_cancel_job(client):
-    create_resp = client.post("/jobs/explore", json={"type": "explore", "params": {"slug": "example-rogue", "steps": 1, "pace": "normal"}})
-    job_id = create_resp.json()["id"]
-
-    response = client.post(f"/jobs/{job_id}/cancel")
-    assert response.status_code == 200
-    assert response.json() == {"message": "Job cancelled"}
+    response = client.post("/jobs/any/cancel")
+    assert response.status_code == 501

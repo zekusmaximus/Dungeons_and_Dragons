@@ -52,7 +52,7 @@ class SessionState(BaseModel):
     turn: int = Field(ge=0)
     scene_id: str
     location: str
-    hp: int
+    hp: int = Field(ge=0)
     conditions: List[str]
     flags: Dict[str, Any]
     log_index: int = Field(ge=0)
@@ -120,7 +120,20 @@ class TurnResponse(BaseModel):
 
 
 class PreviewRequest(BaseModel):
-    response: str = Field(description="Proposed turn response text")
+    response: str = Field(description="Proposed turn response text", default="")
+    state_patch: Dict[str, Any] = Field(default_factory=dict, description="Partial update to session state")
+    transcript_entry: Optional[str] = Field(
+        default=None, description="Optional transcript line to append on commit"
+    )
+    changelog_entry: Optional[str] = Field(
+        default=None, description="Optional changelog entry to append on commit"
+    )
+    dice_expressions: List[str] = Field(
+        default_factory=list, description="Dice expressions that will consume entropy on commit"
+    )
+    lock_owner: Optional[str] = Field(
+        default=None, description="Owner that must hold the session lock for this preview"
+    )
 
 
 class FileDiff(BaseModel):
@@ -141,6 +154,7 @@ class PreviewResponse(BaseModel):
 
 class CommitRequest(BaseModel):
     preview_id: str
+    lock_owner: Optional[str] = Field(default=None, description="Owner expected to hold the session lock")
 
 
 class CommitResponse(BaseModel):
