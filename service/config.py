@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     repo_root: Path = Path(__file__).resolve().parent.parent
     sessions_dir: str = "sessions"
+    data_dir: str = "data"
+    worlds_dir: str = "worlds"
     dice_file: str = "dice/entropy.ndjson"
     transcript_tail: int = 50
     changelog_tail: int = 50
@@ -30,6 +32,18 @@ class Settings(BaseSettings):
     @property
     def sessions_path(self) -> Path:
         return self.repo_root / self.sessions_dir
+
+    @property
+    def data_path(self) -> Path:
+        return self.repo_root / self.data_dir
+
+    @property
+    def characters_path(self) -> Path:
+        return self.data_path / "characters"
+
+    @property
+    def worlds_path(self) -> Path:
+        return self.repo_root / self.worlds_dir
 
     @property
     def dice_path(self) -> Path:

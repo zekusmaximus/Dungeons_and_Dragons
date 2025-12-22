@@ -12,7 +12,8 @@ from pydantic import BaseModel
 
 from .config import Settings, get_settings
 from .llm import call_llm_api, get_effective_llm_config, persist_llm_config
-from . import storage
+from .storage_backends.factory import get_storage_backend
+from .storage_backends.interfaces import StorageBackend
 from .models import (
     SessionSummary, PaginatedResponse,
     LockClaim, LockInfo, TurnResponse, PreviewRequest, PreviewResponse,
@@ -81,6 +82,10 @@ def get_settings_dep() -> Settings:
     return get_settings()
 
 
+def _get_backend(settings: Settings) -> StorageBackend:
+    return get_storage_backend(settings)
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -97,7 +102,8 @@ def get_schema(schema_name: str, settings: Settings = Depends(get_settings_dep))
 
 @app.get("/sessions")
 def list_sessions(settings: Settings = Depends(get_settings_dep)) -> List[SessionSummary]:
-    sessions_data = storage.list_sessions(settings)
+    backend = _get_backend(settings)
+    sessions_data = backend.session.list_sessions(settings)
     return [SessionSummary(**s) for s in sessions_data]
 
 
@@ -313,12 +319,13 @@ def _normalize_hook_label(hook: Optional[str]) -> Optional[str]:
 
 @app.post("/sessions", status_code=201)
 def create_session(request: NewSessionRequest, settings: Settings = Depends(get_settings_dep)) -> SessionCreateResponse:
+    backend = _get_backend(settings)
     base = _slugify_seed(request.slug or request.hook_id or "adventure")
     candidate = base
     suffix = 1
     while True:
         try:
-            created = storage.create_session(settings, candidate, request.template_slug)
+            created = backend.session.create_session(settings, candidate, request.template_slug)
             return SessionCreateResponse(slug=created)
         except HTTPException as exc:
             if exc.status_code == HTTPStatus.CONFLICT:
@@ -330,12 +337,14 @@ def create_session(request: NewSessionRequest, settings: Settings = Depends(get_
 
 @app.get("/sessions/{slug}/state")
 def session_state(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    return storage.load_state(settings, slug)
+    backend = _get_backend(settings)
+    return backend.state.load_state(settings, slug)
 
 
 @app.get("/data/characters/{slug}.json")
 def character_data(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    return storage.load_character(settings, slug)
+    backend = _get_backend(settings)
+    return backend.character.load_character(settings, slug)
 
 
 @app.get("/sessions/{slug}/transcript")
@@ -345,7 +354,8 @@ def session_transcript(
     cursor: Optional[str] = Query(None, description="Cursor for pagination"),
     settings: Settings = Depends(get_settings_dep),
 ) -> PaginatedResponse:
-    items, next_cursor = storage.load_transcript(settings, slug, tail, cursor)
+    backend = _get_backend(settings)
+    items, next_cursor = backend.text_logs.load_transcript(settings, slug, tail, cursor)
     return PaginatedResponse(items=items, cursor=next_cursor)
 
 
@@ -356,18 +366,21 @@ def session_changelog(
     cursor: Optional[str] = Query(None, description="Cursor for pagination"),
     settings: Settings = Depends(get_settings_dep),
 ) -> PaginatedResponse:
-    items, next_cursor = storage.load_changelog(settings, slug, tail, cursor)
+    backend = _get_backend(settings)
+    items, next_cursor = backend.text_logs.load_changelog(settings, slug, tail, cursor)
     return PaginatedResponse(items=items, cursor=next_cursor)
 
 
 @app.get("/sessions/{slug}/quests")
 def session_quests(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    return {"quests": storage.load_quests(settings, slug)}
+    backend = _get_backend(settings)
+    return {"quests": backend.state.load_quests(settings, slug)}
 
 
 @app.get("/sessions/{slug}/quests/{quest_id}")
 def get_quest(slug: str, quest_id: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    quests = storage.load_quests(settings, slug)
+    backend = _get_backend(settings)
+    quests = backend.state.load_quests(settings, slug)
     if quest_id not in quests:
         raise HTTPException(status_code=404, detail="Quest not found")
     return quests[quest_id]
@@ -375,49 +388,54 @@ def get_quest(slug: str, quest_id: str, settings: Settings = Depends(get_setting
 
 @app.post("/sessions/{slug}/quests")
 def create_quest(slug: str, quest_data: Dict, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    errors = storage.validate_data(quest_data, "quest", settings)
+    backend = _get_backend(settings)
+    errors = backend.state.validate_data(quest_data, "quest", settings)
     if errors:
         return {"errors": errors}
     if dry_run:
         return {"diff": f"Would add quest {quest_data.get('id', 'new')}", "warnings": []}
     quest_id = quest_data.get("id", str(uuid.uuid4()))
-    storage.save_quest(settings, slug, quest_id, quest_data)
+    backend.state.save_quest(settings, slug, quest_id, quest_data)
     return {"id": quest_id}
 
 
 @app.put("/sessions/{slug}/quests/{quest_id}")
 def update_quest(slug: str, quest_id: str, quest_data: Dict, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    errors = storage.validate_data(quest_data, "quest", settings)
+    backend = _get_backend(settings)
+    errors = backend.state.validate_data(quest_data, "quest", settings)
     if errors:
         return {"errors": errors}
-    quests = storage.load_quests(settings, slug)
+    quests = backend.state.load_quests(settings, slug)
     if quest_id not in quests:
         raise HTTPException(status_code=404, detail="Quest not found")
     if dry_run:
         return {"diff": f"Would update quest {quest_id}", "warnings": []}
-    storage.save_quest(settings, slug, quest_id, quest_data)
+    backend.state.save_quest(settings, slug, quest_id, quest_data)
     return {"message": "Updated"}
 
 
 @app.delete("/sessions/{slug}/quests/{quest_id}")
 def delete_quest(slug: str, quest_id: str, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    quests = storage.load_quests(settings, slug)
+    backend = _get_backend(settings)
+    quests = backend.state.load_quests(settings, slug)
     if quest_id not in quests:
         raise HTTPException(status_code=404, detail="Quest not found")
     if dry_run:
         return {"diff": f"Would delete quest {quest_id}", "warnings": []}
-    storage.delete_quest(settings, slug, quest_id)
+    backend.state.delete_quest(settings, slug, quest_id)
     return {"message": "Deleted"}
 
 
 @app.get("/sessions/{slug}/npc-memory")
 def session_npc_memory(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    return {"npc_memory": storage.load_npc_memory(settings, slug)}
+    backend = _get_backend(settings)
+    return {"npc_memory": backend.docs.load_doc(settings, slug, "npc_memory")}
 
 
 @app.get("/sessions/{slug}/npc-memory/{index}")
 def get_npc(slug: str, index: int, settings: Settings = Depends(get_settings_dep)) -> dict:
-    npcs = storage.load_npc_memory(settings, slug)
+    backend = _get_backend(settings)
+    npcs = backend.docs.load_doc(settings, slug, "npc_memory")
     if index < 0 or index >= len(npcs):
         raise HTTPException(status_code=404, detail="NPC not found")
     return npcs[index]
@@ -425,48 +443,53 @@ def get_npc(slug: str, index: int, settings: Settings = Depends(get_settings_dep
 
 @app.post("/sessions/{slug}/npc-memory")
 def create_npc(slug: str, npc_data: Dict, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
+    backend = _get_backend(settings)
     # Assume no schema
     if dry_run:
         return {"diff": f"Would add NPC {npc_data.get('name', 'new')}", "warnings": []}
-    npcs = storage.load_npc_memory(settings, slug)
+    npcs = backend.docs.load_doc(settings, slug, "npc_memory")
     npcs.append(npc_data)
     if not dry_run:
-        storage.save_npc_memory(settings, slug, npcs)
+        backend.docs.save_doc(settings, slug, "npc_memory", npcs)
     return {"index": len(npcs) - 1}
 
 
 @app.put("/sessions/{slug}/npc-memory/{index}")
 def update_npc(slug: str, index: int, npc_data: Dict, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    npcs = storage.load_npc_memory(settings, slug)
+    backend = _get_backend(settings)
+    npcs = backend.docs.load_doc(settings, slug, "npc_memory")
     if index < 0 or index >= len(npcs):
         raise HTTPException(status_code=404, detail="NPC not found")
     if dry_run:
         return {"diff": f"Would update NPC at {index}", "warnings": []}
     npcs[index] = npc_data
-    storage.save_npc_memory(settings, slug, npcs)
+    backend.docs.save_doc(settings, slug, "npc_memory", npcs)
     return {"message": "Updated"}
 
 
 @app.delete("/sessions/{slug}/npc-memory/{index}")
 def delete_npc(slug: str, index: int, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    npcs = storage.load_npc_memory(settings, slug)
+    backend = _get_backend(settings)
+    npcs = backend.docs.load_doc(settings, slug, "npc_memory")
     if index < 0 or index >= len(npcs):
         raise HTTPException(status_code=404, detail="NPC not found")
     if dry_run:
         return {"diff": f"Would delete NPC at {index}", "warnings": []}
     npcs.pop(index)
-    storage.save_npc_memory(settings, slug, npcs)
+    backend.docs.save_doc(settings, slug, "npc_memory", npcs)
     return {"message": "Deleted"}
 
 
 @app.get("/sessions/{slug}/world/factions")
 def session_factions(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    return storage.load_factions(settings, slug)
+    backend = _get_backend(settings)
+    return backend.world.load_factions(settings, slug)
 
 
 @app.get("/sessions/{slug}/world/factions/{faction_id}")
 def get_faction(slug: str, faction_id: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    factions = storage.load_factions(settings, slug)
+    backend = _get_backend(settings)
+    factions = backend.world.load_factions(settings, slug)
     if faction_id not in factions:
         raise HTTPException(status_code=404, detail="Faction not found")
     return factions[faction_id]
@@ -474,106 +497,119 @@ def get_faction(slug: str, faction_id: str, settings: Settings = Depends(get_set
 
 @app.post("/sessions/{slug}/world/factions")
 def create_faction(slug: str, faction_data: Dict, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
+    backend = _get_backend(settings)
     # Assume no schema for faction
     if dry_run:
         return {"diff": f"Would add faction {faction_data.get('id', 'new')}", "warnings": []}
     faction_id = faction_data.get("id", str(uuid.uuid4()))
-    storage.save_faction(settings, slug, faction_id, faction_data)
+    backend.world.save_faction(settings, slug, faction_id, faction_data)
     return {"id": faction_id}
 
 
 @app.put("/sessions/{slug}/world/factions/{faction_id}")
 def update_faction(slug: str, faction_id: str, faction_data: Dict, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    factions = storage.load_factions(settings, slug)
+    backend = _get_backend(settings)
+    factions = backend.world.load_factions(settings, slug)
     if faction_id not in factions:
         raise HTTPException(status_code=404, detail="Faction not found")
     if dry_run:
         return {"diff": f"Would update faction {faction_id}", "warnings": []}
-    storage.save_faction(settings, slug, faction_id, faction_data)
+    backend.world.save_faction(settings, slug, faction_id, faction_data)
     return {"message": "Updated"}
 
 
 @app.delete("/sessions/{slug}/world/factions/{faction_id}")
 def delete_faction(slug: str, faction_id: str, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    factions = storage.load_factions(settings, slug)
+    backend = _get_backend(settings)
+    factions = backend.world.load_factions(settings, slug)
     if faction_id not in factions:
         raise HTTPException(status_code=404, detail="Faction not found")
     if dry_run:
         return {"diff": f"Would delete faction {faction_id}", "warnings": []}
-    storage.delete_faction(settings, slug, faction_id)
+    backend.world.delete_faction(settings, slug, faction_id)
     return {"message": "Deleted"}
 
 
 @app.get("/sessions/{slug}/world/timeline")
 def session_timeline(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    return storage.load_timeline(settings, slug)
+    backend = _get_backend(settings)
+    return backend.world.load_timeline(settings, slug)
 
 
 @app.post("/sessions/{slug}/world/timeline")
 def create_timeline_event(slug: str, event_data: Dict, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
+    backend = _get_backend(settings)
     if dry_run:
         return {"diff": f"Would add timeline event {event_data.get('id', 'new')}", "warnings": []}
     event_id = event_data.get("id", str(uuid.uuid4()))
-    storage.save_timeline_event(settings, slug, event_id, event_data)
+    backend.world.save_timeline_event(settings, slug, event_id, event_data)
     return {"id": event_id}
 
 
 @app.put("/sessions/{slug}/world/timeline/{event_id}")
 def update_timeline_event(slug: str, event_id: str, event_data: Dict, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    timeline = storage.load_timeline(settings, slug)
+    backend = _get_backend(settings)
+    timeline = backend.world.load_timeline(settings, slug)
     if event_id not in timeline:
         raise HTTPException(status_code=404, detail="Event not found")
     if dry_run:
         return {"diff": f"Would update timeline event {event_id}", "warnings": []}
-    storage.save_timeline_event(settings, slug, event_id, event_data)
+    backend.world.save_timeline_event(settings, slug, event_id, event_data)
     return {"message": "Updated"}
 
 
 @app.delete("/sessions/{slug}/world/timeline/{event_id}")
 def delete_timeline_event(slug: str, event_id: str, dry_run: bool = Query(False), settings: Settings = Depends(get_settings_dep)) -> dict:
-    timeline = storage.load_timeline(settings, slug)
+    backend = _get_backend(settings)
+    timeline = backend.world.load_timeline(settings, slug)
     if event_id not in timeline:
         raise HTTPException(status_code=404, detail="Event not found")
     if dry_run:
         return {"diff": f"Would delete timeline event {event_id}", "warnings": []}
-    storage.delete_timeline_event(settings, slug, event_id)
+    backend.world.delete_timeline_event(settings, slug, event_id)
     return {"message": "Deleted"}
 
 
 @app.get("/sessions/{slug}/world/rumors")
 def session_rumors(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    return storage.load_rumors(settings, slug)
+    backend = _get_backend(settings)
+    return backend.world.load_rumors(settings, slug)
 
 
 @app.get("/sessions/{slug}/world/faction-clocks")
 def session_faction_clocks(slug: str, settings: Settings = Depends(get_settings_dep)) -> dict:
-    return storage.load_faction_clocks(settings, slug)
+    backend = _get_backend(settings)
+    return backend.world.load_faction_clocks(settings, slug)
 
 
 @app.get("/sessions/{slug}/turn")
 def get_turn(slug: str, settings: Settings = Depends(get_settings_dep)) -> TurnResponse:
-    prompt = storage.load_turn(settings, slug)
-    state = storage.load_state(settings, slug)
+    backend = _get_backend(settings)
+    prompt = backend.turn.load_turn(settings, slug)
+    state = backend.state.load_state(settings, slug)
     turn_number = state.get("turn", 0)
-    lock_info = storage.get_lock_info(settings, slug)
+    lock_info = backend.session.get_lock_info(settings, slug)
     return TurnResponse(prompt=prompt, turn_number=turn_number, lock_status=lock_info)
 
 
 @app.post("/sessions/{slug}/lock/claim")
 def claim_lock(slug: str, claim: LockClaim, settings: Settings = Depends(get_settings_dep)):
-    storage.claim_lock(settings, slug, claim.owner, claim.ttl)
+    backend = _get_backend(settings)
+    backend.session.claim_lock(settings, slug, claim.owner, claim.ttl)
     return {"message": "Lock claimed"}
 
 
 @app.delete("/sessions/{slug}/lock")
 def release_lock(slug: str, settings: Settings = Depends(get_settings_dep)):
-    storage.release_lock(settings, slug)
+    backend = _get_backend(settings)
+    backend.session.release_lock(settings, slug)
     return {"message": "Lock released"}
 
 
 @app.post("/sessions/{slug}/turn/preview")
 def preview_turn(slug: str, request: PreviewRequest, settings: Settings = Depends(get_settings_dep)) -> PreviewResponse:
-    preview_id, diffs, entropy_plan = storage.create_preview(settings, slug, request)
+    backend = _get_backend(settings)
+    preview_id, diffs, entropy_plan = backend.turn.create_preview(settings, slug, request)
     file_diffs = [FileDiff(path=d["path"], changes=d["changes"]) for d in diffs]
     ep = EntropyPlan(indices=entropy_plan["indices"], usage=entropy_plan["usage"])
     return PreviewResponse(id=preview_id, diffs=file_diffs, entropy_plan=ep)
@@ -581,7 +617,8 @@ def preview_turn(slug: str, request: PreviewRequest, settings: Settings = Depend
 
 @app.post("/sessions/{slug}/turn/commit")
 def commit_turn(slug: str, request: CommitRequest, settings: Settings = Depends(get_settings_dep)) -> CommitResponse:
-    state, log_indices = storage.commit_preview(settings, slug, request.preview_id, request.lock_owner)
+    backend = _get_backend(settings)
+    state, log_indices = backend.turn.commit_preview(settings, slug, request.preview_id, request.lock_owner)
     session_state = SessionState(**state)
     return CommitResponse(state=session_state, log_indices=log_indices)
 
@@ -591,12 +628,13 @@ async def _commit_and_narrate_internal(
     slug: str,
     request: CommitRequest,
 ) -> CommitAndNarrateResponse:
-    state_before = storage.load_state(settings, slug)
-    last_discovery_turn = storage.get_last_discovery_turn(settings, slug)
-    preview_data = storage.load_preview_metadata(settings, slug, request.preview_id)
-    state, log_indices = storage.commit_preview(settings, slug, request.preview_id, request.lock_owner)
+    backend = _get_backend(settings)
+    state_before = backend.state.load_state(settings, slug)
+    last_discovery_turn = backend.docs.get_last_discovery_turn(settings, slug)
+    preview_data = backend.turn.load_preview_metadata(settings, slug, request.preview_id)
+    state, log_indices = backend.turn.commit_preview(settings, slug, request.preview_id, request.lock_owner)
     session_state = SessionState(**state)
-    diff = storage.summarize_state_diff(state_before, state)
+    diff = backend.turn.summarize_state_diff(state_before, state)
     player_intent = preview_data.get("response", "")
     include_discovery = last_discovery_turn is None or session_state.turn - last_discovery_turn > 2
 
@@ -618,7 +656,7 @@ async def _commit_and_narrate_internal(
             location=session_state.location,
             importance=1,
         )
-        storage.record_last_discovery_turn(settings, slug, session_state.turn)
+        backend.docs.record_last_discovery_turn(settings, slug, session_state.turn)
     consequence_echo = dm_output.consequence_echo or "A new consequence unfolds."
     record_payload = TurnRecord(
         turn=session_state.turn,
@@ -628,7 +666,7 @@ async def _commit_and_narrate_internal(
         dm=dm_output,
         created_at=datetime.now(timezone.utc),
     ).model_dump(mode="json")
-    storage.persist_turn_record(settings, slug, record_payload)
+    backend.turn.persist_turn_record(settings, slug, record_payload)
 
     response = CommitAndNarrateResponse(
         commit=CommitResponse(state=session_state, log_indices=log_indices),
@@ -646,12 +684,13 @@ async def _commit_and_narrate_opening(
     hook_label: Optional[str],
     character: Optional[Dict],
 ) -> CommitAndNarrateResponse:
-    state_before = storage.load_state(settings, slug)
-    last_discovery_turn = storage.get_last_discovery_turn(settings, slug)
-    preview_data = storage.load_preview_metadata(settings, slug, request.preview_id)
-    state, log_indices = storage.commit_preview(settings, slug, request.preview_id, request.lock_owner)
+    backend = _get_backend(settings)
+    state_before = backend.state.load_state(settings, slug)
+    last_discovery_turn = backend.docs.get_last_discovery_turn(settings, slug)
+    preview_data = backend.turn.load_preview_metadata(settings, slug, request.preview_id)
+    state, log_indices = backend.turn.commit_preview(settings, slug, request.preview_id, request.lock_owner)
     session_state = SessionState(**state)
-    diff = storage.summarize_state_diff(state_before, state)
+    diff = backend.turn.summarize_state_diff(state_before, state)
     player_intent = preview_data.get("response", "")
     include_discovery = last_discovery_turn is None or session_state.turn - last_discovery_turn > 2
 
@@ -675,7 +714,7 @@ async def _commit_and_narrate_opening(
             location=session_state.location,
             importance=1,
         )
-        storage.record_last_discovery_turn(settings, slug, session_state.turn)
+        backend.docs.record_last_discovery_turn(settings, slug, session_state.turn)
     consequence_echo = dm_output.consequence_echo or "A new consequence unfolds."
     record_payload = TurnRecord(
         turn=session_state.turn,
@@ -685,7 +724,7 @@ async def _commit_and_narrate_opening(
         dm=dm_output,
         created_at=datetime.now(timezone.utc),
     ).model_dump(mode="json")
-    storage.persist_turn_record(settings, slug, record_payload)
+    backend.turn.persist_turn_record(settings, slug, record_payload)
 
     response = CommitAndNarrateResponse(
         commit=CommitResponse(state=session_state, log_indices=log_indices),
@@ -711,7 +750,8 @@ def create_character_for_session(
     request: CharacterCreationRequest,
     settings: Settings = Depends(get_settings_dep),
 ) -> CharacterCreationResponse:
-    state = storage.load_state(settings, slug)
+    backend = _get_backend(settings)
+    state = backend.state.load_state(settings, slug)
     equipment = request.equipment or []
     ability_scores = request.abilities.model_dump(by_alias=True)
     dex_mod = _ability_modifier(request.abilities.dex)
@@ -755,7 +795,7 @@ def create_character_for_session(
         "spells": request.spells,
         "method": request.method,
     }
-    saved_character = storage.save_character(settings, slug, character_payload, persist_to_data=True)
+    saved_character = backend.character.save_character(settings, slug, character_payload, persist_to_data=True)
 
     state["character"] = slug
     state["hp"] = derived_hp
@@ -775,22 +815,23 @@ def create_character_for_session(
         state["conditions"] = []
     if not state.get("flags"):
         state["flags"] = {}
-    updated_state = storage.save_state(settings, slug, state)
+    updated_state = backend.state.save_state(settings, slug, state)
     return CharacterCreationResponse(character=saved_character, state=updated_state)
 
 
 @app.get("/sessions/{slug}/player")
 def get_player_bundle(slug: str, settings: Settings = Depends(get_settings_dep)) -> PlayerBundleResponse:
-    state = SessionState(**storage.load_state(settings, slug))
+    backend = _get_backend(settings)
+    state = SessionState(**backend.state.load_state(settings, slug))
     try:
-        character = storage.load_character(settings, slug)
+        character = backend.character.load_character(settings, slug)
     except HTTPException:
         character = {}
-    recaps_raw = storage.load_turn_records(settings, slug, limit=3)
+    recaps_raw = backend.turn.load_turn_records(settings, slug, limit=3)
     recaps = [TurnRecord(**r) for r in recaps_raw]
     discovery_log = get_discovery_log(slug, settings.repo_root)
     discoveries = [d.to_dict() for d in discovery_log.get_recent_discoveries(5)]
-    quests = storage.load_quests(settings, slug)
+    quests = backend.state.load_quests(settings, slug)
     raw_suggestions: List[str] = []
     if recaps and recaps[0].dm and recaps[0].dm.choices:
         raw_suggestions = [choice.text for choice in recaps[0].dm.choices if choice.text]
@@ -819,18 +860,19 @@ async def player_opening_scene(
     request: OpeningSceneRequest,
     settings: Settings = Depends(get_settings_dep),
 ) -> PlayerTurnResponse:
+    backend = _get_backend(settings)
     owner = "player-ui"
     claimed_here = False
-    lock_info = storage.get_lock_info(settings, slug)
+    lock_info = backend.session.get_lock_info(settings, slug)
     if lock_info and lock_info.owner != owner:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail="Session is busy right now. Try again in a moment.")
     if lock_info is None:
-        storage.claim_lock(settings, slug, owner, ttl=300)
+        backend.session.claim_lock(settings, slug, owner, ttl=300)
         claimed_here = True
     try:
-        state = storage.load_state(settings, slug)
+        state = backend.state.load_state(settings, slug)
         try:
-            character = storage.load_character(settings, slug)
+            character = backend.character.load_character(settings, slug)
         except HTTPException:
             character = {}
         hook_label = _normalize_hook_label(request.hook)
@@ -846,7 +888,7 @@ async def player_opening_scene(
             if existing_label != hook_label:
                 state_patch["adventure_hook"] = {"label": hook_label}
 
-        preview_id, _, _ = storage.create_preview(
+        preview_id, _, _ = backend.turn.create_preview(
             settings,
             slug,
             PreviewRequest(
@@ -860,7 +902,7 @@ async def player_opening_scene(
         result = await _commit_and_narrate_opening(settings, slug, commit_request, hook_label, character)
     finally:
         if claimed_here:
-            storage.release_lock(settings, slug)
+            backend.session.release_lock(settings, slug)
 
     raw_suggestions = [choice.text for choice in result.dm.choices if choice and getattr(choice, "text", None)] if result.dm.choices else []
     if not raw_suggestions:
@@ -883,8 +925,9 @@ async def player_opening_scene(
 
 @app.post("/sessions/{slug}/roll")
 def player_roll(slug: str, request: RollRequest, settings: Settings = Depends(get_settings_dep)) -> RollResult:
+    backend = _get_backend(settings)
     try:
-        return storage.perform_roll(settings, slug, request)
+        return backend.turn.perform_roll(settings, slug, request)
     except HTTPException as exc:
         if exc.status_code >= 500:
             raise exc
@@ -904,16 +947,17 @@ async def player_turn(
     request: PlayerTurnRequest,
     settings: Settings = Depends(get_settings_dep),
 ) -> PlayerTurnResponse:
+    backend = _get_backend(settings)
     owner = "player-ui"
     claimed_here = False
-    lock_info = storage.get_lock_info(settings, slug)
+    lock_info = backend.session.get_lock_info(settings, slug)
     if lock_info and lock_info.owner != owner:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail="Session is busy right now. Try again in a moment.")
     if lock_info is None:
-        storage.claim_lock(settings, slug, owner, ttl=300)
+        backend.session.claim_lock(settings, slug, owner, ttl=300)
         claimed_here = True
     try:
-        preview_id, _, _ = storage.create_preview(
+        preview_id, _, _ = backend.turn.create_preview(
             settings,
             slug,
             PreviewRequest(
@@ -927,7 +971,7 @@ async def player_turn(
         result = await _commit_and_narrate_internal(settings, slug, commit_request)
     finally:
         if claimed_here:
-            storage.release_lock(settings, slug)
+            backend.session.release_lock(settings, slug)
 
     raw_suggestions = [choice.text for choice in result.dm.choices if choice and getattr(choice, "text", None)] if result.dm.choices else []
     if not raw_suggestions:
@@ -993,12 +1037,14 @@ def entropy_preview(
     limit: int = Query(5, ge=1, le=50, description="Number of entropy records to preview"),
     settings: Settings = Depends(get_settings_dep),
 ) -> dict:
-    return {"entropy": storage.load_entropy_preview(settings, limit)}
+    backend = _get_backend(settings)
+    return {"entropy": backend.entropy.load_entropy_preview(settings, limit)}
 
 
 @app.get("/sessions/{slug}/history/commits", tags=["History"], summary="Get commit history for a session")
 def session_commit_history(slug: str, settings: Settings = Depends(get_settings_dep)) -> List[CommitSummary]:
-    commits_data = storage.load_commit_history(settings, slug)
+    backend = _get_backend(settings)
+    commits_data = backend.turn.load_commit_history(settings, slug)
     return [CommitSummary(**c) for c in commits_data]
 
 
@@ -1009,20 +1055,23 @@ def session_diff(
     to: str = Query(..., description="To commit ID"),
     settings: Settings = Depends(get_settings_dep),
     ) -> DiffResponse:
-        diffs = storage.load_session_diff(settings, slug, from_commit, to)
+        backend = _get_backend(settings)
+        diffs = backend.turn.load_session_diff(settings, slug, from_commit, to)
         file_diffs = [FileDiff(path=d["path"], changes=d["changes"]) for d in diffs]
         return DiffResponse(files=file_diffs)
 
 
 @app.get("/sessions/{slug}/turns")
 def list_turn_records(slug: str, limit: int = Query(3, ge=1, le=25), settings: Settings = Depends(get_settings_dep)) -> List[TurnRecord]:
-    records = storage.load_turn_records(settings, slug, limit)
+    backend = _get_backend(settings)
+    records = backend.turn.load_turn_records(settings, slug, limit)
     return [TurnRecord(**r) for r in records]
 
 
 @app.get("/sessions/{slug}/turns/{turn}")
 def get_turn_record(slug: str, turn: int, settings: Settings = Depends(get_settings_dep)) -> TurnRecord:
-    record = storage.load_turn_record(settings, slug, turn)
+    backend = _get_backend(settings)
+    record = backend.turn.load_turn_record(settings, slug, turn)
     return TurnRecord(**record)
 
 
@@ -1032,7 +1081,8 @@ def session_entropy_history(
     limit: int = Query(10, ge=1, le=100, description="Number of entries to return"),
     settings: Settings = Depends(get_settings_dep),
 ) -> List[EntropyHistoryEntry]:
-    history_data = storage.load_entropy_history(settings, slug, limit)
+    backend = _get_backend(settings)
+    history_data = backend.entropy.load_entropy_history(settings, slug, limit)
     return [EntropyHistoryEntry(**h) for h in history_data]
 
 
@@ -1100,8 +1150,9 @@ async def generate_scene_narrative(
     settings: Settings = Depends(get_settings_dep)
 ) -> LLMNarrativeResponse:
     # Load session context
-    state = storage.load_state(settings, slug)
-    character = storage.load_character(settings, slug)
+    backend = _get_backend(settings)
+    state = backend.state.load_state(settings, slug)
+    character = backend.character.load_character(settings, slug)
     
     # Build context from session
     context = {
@@ -1532,7 +1583,8 @@ def get_discoveries_by_type(slug: str, discovery_type: str, settings: Settings =
 def log_discovery(slug: str, request: DiscoveryCreateRequest, settings: Settings = Depends(get_settings_dep)):
     """Log a new discovery"""
     discovery_log = get_discovery_log(slug, settings.repo_root)
-    state = storage.load_state(settings, slug)
+    backend = _get_backend(settings)
+    state = backend.state.load_state(settings, slug)
     
     discovery = discovery_log.create_discovery(
         name=request.name,
@@ -1543,7 +1595,7 @@ def log_discovery(slug: str, request: DiscoveryCreateRequest, settings: Settings
         related_quest=request.related_quest,
         rewards=request.rewards
     )
-    storage.record_last_discovery_turn(settings, slug, state.get("turn", 0))
+    backend.docs.record_last_discovery_turn(settings, slug, state.get("turn", 0))
     return DiscoveryResponse(**discovery.to_dict())
 
 
@@ -1620,7 +1672,8 @@ class ManualSaveRequest(BaseModel):
 
 
 def _require_save_lock(slug: str, settings: Settings, owner: Optional[str]):
-    lock_info = storage.get_lock_info(settings, slug)
+    backend = _get_backend(settings)
+    lock_info = backend.session.get_lock_info(settings, slug)
     if lock_info is None:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail="Lock required to create or restore a save")
     if owner and lock_info.owner != owner:

@@ -134,7 +134,7 @@ def create_session(settings: Settings, slug: str, template_slug: str = "example-
         encoding="utf-8",
     )
 
-    template_character = settings.repo_root / "data" / "characters" / f"{template_slug}.json"
+    template_character = settings.characters_path / f"{template_slug}.json"
     if template_character.exists():
         try:
             character_data = json.loads(template_character.read_text(encoding="utf-8"))
@@ -155,7 +155,7 @@ def load_character(settings: Settings, slug: str) -> Dict:
 
     session_path = settings.sessions_path / slug
     session_character = session_path / "character.json"
-    character_path = settings.repo_root / "data" / "characters" / f"{slug}.json"
+    character_path = settings.characters_path / f"{slug}.json"
 
     if session_character.exists():
         target = session_character
@@ -195,7 +195,7 @@ def save_character(settings: Settings, slug: str, character_data: Dict, persist_
     session_character.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     if persist_to_data:
-        characters_dir = settings.repo_root / "data" / "characters"
+        characters_dir = settings.characters_path
         characters_dir.mkdir(parents=True, exist_ok=True)
         data_character = characters_dir / f"{slug}.json"
         data_character.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -315,7 +315,7 @@ def save_npc_memory(settings: Settings, slug: str, npcs: List[Dict]):
 def resolve_world(settings: Settings, slug: str) -> Path:
     state = load_state(settings, slug)
     world_name = state.get("world", "default")
-    world_path = settings.repo_root / "worlds" / world_name
+    world_path = settings.worlds_path / world_name
     if not world_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"World '{world_name}' not found"
