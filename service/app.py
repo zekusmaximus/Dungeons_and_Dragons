@@ -136,6 +136,125 @@ _ARMOR_RULES = [
     ("padded", 11, None),
 ]
 
+_IMPERATIVE_STARTERS = {
+    "go", "move", "enter", "leave", "travel", "return", "approach", "retreat",
+    "look", "search", "scan", "inspect", "investigate", "explore", "survey", "scout",
+    "check", "examine", "observe", "listen", "watch", "follow", "track",
+    "talk", "speak", "ask", "question", "negotiate", "persuade", "intimidate",
+    "deceive", "barter", "buy", "sell", "tell", "warn", "signal", "call",
+    "prepare", "plan", "ready", "rest", "heal", "help", "assist", "protect",
+    "defend", "attack", "strike", "cast", "use", "draw", "open", "close",
+    "take", "grab", "secure", "save", "rescue", "hide", "sneak", "climb",
+    "swim", "jump", "dodge", "wait", "press", "probe", "gather", "do", "try",
+}
+
+
+def _decapitalize(text: str) -> str:
+    for idx, char in enumerate(text):
+        if char.isalpha():
+            return text[:idx] + char.lower() + text[idx + 1:]
+    return text
+
+
+def _starts_with_imperative(text: str) -> bool:
+    lowered = text.strip().lower()
+    if lowered.startswith(("try to ", "try ")):
+        return True
+    match = re.match(r"^[\"'(\[]*([a-z]+)", lowered)
+    if not match:
+        return False
+    return match.group(1) in _IMPERATIVE_STARTERS
+
+
+def _normalize_suggestion(text: str) -> Optional[str]:
+    if not text:
+        return None
+    cleaned = " ".join(str(text).strip().split())
+    if not cleaned:
+        return None
+    if _starts_with_imperative(cleaned):
+        return cleaned
+    lowered = cleaned.lstrip().lower()
+    if lowered.startswith(("a ", "an ", "the ")):
+        return f"Try to do {_decapitalize(cleaned)}"
+    return f"Try to {_decapitalize(cleaned)}"
+
+
+def _suggestion_verb(text: str) -> str:
+    match = re.match(r"^[\"'(\[]*([a-z]+)", text.strip().lower())
+    return match.group(1) if match else ""
+
+
+def _is_wildcard_suggestion(text: str) -> bool:
+    lowered = text.strip().lower()
+    return "something unexpected" in lowered or "anything unexpected" in lowered
+
+
+def _build_suggestions(raw: List[str]) -> List[str]:
+    normalized: List[str] = []
+    seen = set()
+    for item in raw:
+        suggestion = _normalize_suggestion(item)
+        if not suggestion:
+            continue
+        key = suggestion.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(suggestion)
+
+    fallback = [
+        "Survey the area for clues",
+        "Talk to someone nearby",
+        "Check your gear",
+        "Press the most promising lead",
+        "Do something unexpected",
+    ]
+    wildcard_needed = not any(_is_wildcard_suggestion(s) for s in normalized)
+    if wildcard_needed:
+        normalized.append(fallback[-1])
+
+    chosen: List[str] = []
+    used_verbs = set()
+    extras: List[str] = []
+    for suggestion in normalized:
+        verb = _suggestion_verb(suggestion)
+        if verb and verb in used_verbs:
+            extras.append(suggestion)
+            continue
+        used_verbs.add(verb)
+        chosen.append(suggestion)
+    if len(chosen) < 4:
+        for suggestion in extras:
+            chosen.append(suggestion)
+            if len(chosen) >= 4:
+                break
+    for suggestion in fallback:
+        if len(chosen) >= 5:
+            break
+        normalized_fallback = _normalize_suggestion(suggestion)
+        if not normalized_fallback:
+            continue
+        if normalized_fallback.lower() in {s.lower() for s in chosen}:
+            continue
+        chosen.append(normalized_fallback)
+
+    if not any(_is_wildcard_suggestion(s) for s in chosen):
+        if len(chosen) >= 5:
+            chosen[-1] = "Do something unexpected"
+        else:
+            chosen.append("Do something unexpected")
+
+    if len(chosen) < 4:
+        for suggestion in fallback:
+            if len(chosen) >= 4:
+                break
+            normalized_fallback = _normalize_suggestion(suggestion)
+            if normalized_fallback and normalized_fallback.lower() not in {s.lower() for s in chosen}:
+                chosen.append(normalized_fallback)
+
+    return chosen[:5]
+
 
 def _ability_modifier(score: int) -> int:
     return (score - 10) // 2
@@ -672,24 +791,25 @@ def get_player_bundle(slug: str, settings: Settings = Depends(get_settings_dep))
     discovery_log = get_discovery_log(slug, settings.repo_root)
     discoveries = [d.to_dict() for d in discovery_log.get_recent_discoveries(5)]
     quests = storage.load_quests(settings, slug)
-    suggestions: List[str] = []
+    raw_suggestions: List[str] = []
     if recaps and recaps[0].dm and recaps[0].dm.choices:
-        suggestions = [choice.text for choice in recaps[0].dm.choices if choice.text][:5]
-    if not suggestions:
-        suggestions = [
+        raw_suggestions = [choice.text for choice in recaps[0].dm.choices if choice.text]
+    if not raw_suggestions:
+        raw_suggestions = [
             "Survey the area for clues",
             "Talk to someone nearby",
             "Check your gear and supplies",
             "Look for a safe path forward",
             "Take a breather and plan",
         ]
+    suggestions = _build_suggestions(raw_suggestions)
     return PlayerBundleResponse(
         state=state,
         character=character,
         recaps=recaps,
         discoveries=discoveries,
         quests=quests,
-        suggestions=suggestions[:5],
+        suggestions=suggestions,
     )
 
 
@@ -742,25 +862,21 @@ async def player_opening_scene(
         if claimed_here:
             storage.release_lock(settings, slug)
 
-    suggestions = [choice.text for choice in result.dm.choices if choice and getattr(choice, "text", None)] if result.dm.choices else []
-    if len(suggestions) < 4:
-        fallback = [
+    raw_suggestions = [choice.text for choice in result.dm.choices if choice and getattr(choice, "text", None)] if result.dm.choices else []
+    if not raw_suggestions:
+        raw_suggestions = [
             "Probe the surroundings",
             "Strike up a conversation",
             "Prepare for trouble",
             "Take stock of your gear",
             "Move cautiously ahead",
         ]
-        for idea in fallback:
-            if idea not in suggestions:
-                suggestions.append(idea)
-            if len(suggestions) >= 5:
-                break
+    suggestions = _build_suggestions(raw_suggestions)
     return PlayerTurnResponse(
         state=result.commit.state,
         narration=result.dm,
         turn_record=result.turn_record,
-        suggestions=suggestions[:5],
+        suggestions=suggestions,
         roll_request=result.dm.roll_request,
     )
 
@@ -813,25 +929,21 @@ async def player_turn(
         if claimed_here:
             storage.release_lock(settings, slug)
 
-    suggestions = [choice.text for choice in result.dm.choices if choice and getattr(choice, "text", None)] if result.dm.choices else []
-    if len(suggestions) < 4:
-        fallback = [
+    raw_suggestions = [choice.text for choice in result.dm.choices if choice and getattr(choice, "text", None)] if result.dm.choices else []
+    if not raw_suggestions:
+        raw_suggestions = [
             "Probe the surroundings",
             "Strike up a conversation",
             "Prepare for trouble",
             "Take stock of your gear",
             "Move cautiously ahead",
         ]
-        for idea in fallback:
-            if idea not in suggestions:
-                suggestions.append(idea)
-            if len(suggestions) >= 5:
-                break
+    suggestions = _build_suggestions(raw_suggestions)
     return PlayerTurnResponse(
         state=result.commit.state,
         narration=result.dm,
         turn_record=result.turn_record,
-        suggestions=suggestions[:5],
+        suggestions=suggestions,
         roll_request=result.dm.roll_request,
     )
 

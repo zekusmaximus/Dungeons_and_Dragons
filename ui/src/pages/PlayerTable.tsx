@@ -188,6 +188,12 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
   };
 
   const titleCase = (value?: string) => (value ? value.replace(/\w\S*/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase()) : '');
+  const shorten = (value?: string, max = 120) => {
+    if (!value) return '';
+    const compact = value.replace(/\s+/g, ' ').trim();
+    if (compact.length <= max) return compact;
+    return `${compact.slice(0, max - 1)}...`;
+  };
 
   const formatRollRequest = (req: RollRequest) => {
     const skill = req.skill ? titleCase(req.skill.replace(/_/g, ' ')) : '';
@@ -254,6 +260,34 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
     }
   };
 
+  const handleRollAndSend = async () => {
+    if (!rollRequest || sending) return;
+    setError(null);
+    try {
+      const response = await fetch(`/api/sessions/${sessionSlug}/roll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: rollRequest.kind,
+          ability: rollRequest.ability,
+          skill: rollRequest.skill,
+          advantage: rollRequest.advantage,
+        }),
+      });
+      const data: RollResult = await response.json();
+      if (!response.ok) {
+        throw new Error((data as any).detail);
+      }
+      setRollResult(data);
+      const formatted = formatRollResult(data);
+      setInput(formatted);
+      setChat((prev) => [...prev, { role: 'roll', text: formatted }]);
+      await sendAction(formatted);
+    } catch (e: any) {
+      setError('The DM gestures for a pause. Try again in a moment.');
+    }
+  };
+
   const sendAction = async (override?: string) => {
     const actionText = (override ?? input).trim();
     if (!actionText) return;
@@ -303,11 +337,11 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
         return;
       }
       event.preventDefault();
-      handleRoll();
+      handleRollAndSend();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [rollRequest, handleRoll]);
+  }, [rollRequest, handleRollAndSend]);
 
   const displaySuggestions = suggestions.length ? suggestions.slice(0, 5) : [
     'Survey the area for clues',
@@ -324,6 +358,37 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
   const hpMax = bundle?.state?.max_hp ?? bundle?.character?.max_hp;
   const acValue = bundle?.state?.ac ?? bundle?.character?.ac ?? '-';
   const hpLabel = hpMax ? `${hpCurrent} / ${hpMax}` : `${hpCurrent}`;
+  const questList = bundle?.quests ? Object.values(bundle.quests) : [];
+  const activeQuests = questList.filter((quest: any) => {
+    const status = (quest?.status || '').toString().toLowerCase();
+    return !status || !['done', 'complete', 'completed', 'resolved', 'closed'].includes(status);
+  });
+  const primaryQuest = activeQuests[0];
+  const questObjective = Array.isArray(primaryQuest?.objectives) ? primaryQuest.objectives[0] : primaryQuest?.objective;
+  const objective = shorten(questObjective || primaryQuest?.title || primaryQuest?.name || primaryQuest?.id || bundle?.state?.adventure_hook?.label, 100);
+  const rollPrompt = rollRequest ? formatRollRequest(rollRequest).replace(/\.$/, '') : '';
+  const pressure = shorten(
+    rollRequest
+      ? `Pending roll: ${rollRequest.reason || rollPrompt}`
+      : bundle?.recaps?.[0]?.consequence_echo,
+    120,
+  );
+  const line1Parts = [];
+  if (objective) line1Parts.push(`Objective: ${objective}`);
+  if (pressure) line1Parts.push(`Pressure: ${pressure}`);
+  let stakesLine1 = line1Parts.join('  ');
+  let stakesLine2 = location ? `Location: ${shorten(location, 80)}` : '';
+  if (!stakesLine1 && location) {
+    stakesLine1 = `Location: ${shorten(location, 80)}`;
+    stakesLine2 = '';
+  }
+  const inputPlaceholder = rollRequest
+    ? 'Roll pending - click Roll & Send or type the result.'
+    : 'Describe your move, ask a question, or try something bold.';
+  const npcMemory = (bundle?.state?.npc_memory || bundle?.state?.npcs || bundle?.state?.npcMemory || []) as any[];
+  const keyNpcs = Array.isArray(npcMemory) ? npcMemory.slice(0, 3) : [];
+  const hookLabel = bundle?.state?.adventure_hook?.label;
+  const lastRecap = bundle?.recaps?.[0]?.dm?.recap;
 
   return (
     <div className="player-table">
@@ -339,6 +404,12 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
             <span>HP {hpLabel}</span>
             <span>AC {acValue}</span>
           </div>
+          {(stakesLine1 || stakesLine2) && (
+            <div className="session-stakes">
+              {stakesLine1 && <div>{stakesLine1}</div>}
+              {stakesLine2 && <div>{stakesLine2}</div>}
+            </div>
+          )}
         </div>
         <div className="header-actions">
           <button className="ghost" onClick={onBack}>Leave table</button>
@@ -366,7 +437,8 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
                 {rollRequest.reason && <div className="subtle">{rollRequest.reason}</div>}
               </div>
               <div className="roll-actions">
-                <button className="primary" onClick={handleRoll}>Roll</button>
+                <button className="primary" onClick={handleRollAndSend}>Roll &amp; Send</button>
+                <button className="ghost" onClick={handleRoll}>Roll</button>
                 {typeof rollRequest.dc === 'number' && <div className="dc-pill">DC {rollRequest.dc}</div>}
               </div>
               {rollResult && (
@@ -382,7 +454,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Describe your move, ask a question, or try something bold."
+              placeholder={inputPlaceholder}
               rows={3}
             />
             <div className="composer-actions">
@@ -476,32 +548,28 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
             </div>
             {isJournalOpen && (
               <div className="card-body">
-                <div className="section">
-                  <h4>Adventure hook</h4>
-                  <p>{bundle?.state?.adventure_hook?.label || 'Not set yet.'}</p>
-                </div>
-                <div className="section">
-                  <h4>Last recap</h4>
-                  <p>{bundle?.recaps?.[0]?.dm?.recap || 'No recap yet.'}</p>
-                </div>
-                <div className="section">
-                  <h4>Quests</h4>
-                  {bundle?.quests && Object.keys(bundle.quests).length > 0 ? (
+                {hookLabel && (
+                  <div className="section">
+                    <h4>Hook</h4>
+                    <p>{hookLabel}</p>
+                  </div>
+                )}
+                {activeQuests.length > 0 && (
+                  <div className="section">
+                    <h4>Active quests</h4>
                     <ul>
-                      {Object.values(bundle.quests).map((quest: any) => (
+                      {activeQuests.map((quest: any) => (
                         <li key={quest.id || quest.name || quest.title}>
                           <strong>{quest.title || quest.name || quest.id}</strong>
                           {quest.status && <span className="subtle"> - {quest.status}</span>}
                         </li>
                       ))}
                     </ul>
-                  ) : (
-                    <p className="subtle">No active quests.</p>
-                  )}
-                </div>
-                <div className="section">
-                  <h4>Discoveries & Rumors</h4>
-                  {bundle?.discoveries && bundle.discoveries.length > 0 ? (
+                  </div>
+                )}
+                {bundle?.discoveries && bundle.discoveries.length > 0 && (
+                  <div className="section">
+                    <h4>Discoveries & Rumors</h4>
                     <ul>
                       {bundle.discoveries.map((disc) => (
                         <li key={disc.name + disc.discovery_type}>
@@ -510,10 +578,29 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
                         </li>
                       ))}
                     </ul>
-                  ) : (
-                    <p className="subtle">Nothing noted yet.</p>
-                  )}
-                </div>
+                  </div>
+                )}
+                {keyNpcs.length > 0 && (
+                  <div className="section">
+                    <h4>Key NPCs</h4>
+                    <ul>
+                      {keyNpcs.map((npc: any, index: number) => {
+                        if (typeof npc === 'string') {
+                          return <li key={npc + index}>{npc}</li>;
+                        }
+                        const label = npc?.name || npc?.title || npc?.id || npc?.npc_id;
+                        if (!label) return null;
+                        return <li key={label + index}>{label}</li>;
+                      })}
+                    </ul>
+                  </div>
+                )}
+                {lastRecap && (
+                  <div className="section">
+                    <h4>Last recap</h4>
+                    <p>{lastRecap}</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -551,6 +638,7 @@ const tableCSS = `
   letter-spacing: 0.08em;
 }
 .session-meta { display: flex; gap: 14px; font-size: 13px; color: #6d5138; flex-wrap: wrap; }
+.session-stakes { font-size: 13px; color: #4a2f1b; display: grid; gap: 4px; }
 .subtle { color: #6d5138; font-size: 13px; margin: 0; }
 .header-actions { display: flex; gap: 10px; }
 .table-layout {
