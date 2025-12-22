@@ -121,6 +121,16 @@ def _sanitize_choices(choices: List[Dict], state: Dict) -> Tuple[List[DMChoice],
             if len(sanitized) >= 5:
                 break
 
+    if len(intents_present) < 3:
+        fallback_used = True
+        wildcard_id = sanitized[-1].id if len(sanitized) >= 5 else chr(ord("A") + len(sanitized))
+        wildcard = DMChoice(id=wildcard_id, text="Try something unexpected.", intent_tag="other", risk="medium")
+        if len(sanitized) >= 5:
+            sanitized[-1] = wildcard
+        else:
+            sanitized.append(wildcard)
+        intents_present.add("other")
+
     if len(sanitized) > 5:
         fallback_used = True
         sanitized = sanitized[:5]
