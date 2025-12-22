@@ -33,6 +33,7 @@ interface TurnRecord {
   consequence_echo: string;
   dm: DMNarration;
   created_at: string;
+  rolls?: { total: number; breakdown: string; text: string }[];
 }
 
 interface PlayerBundle {
@@ -58,7 +59,7 @@ interface PlayerTableProps {
   onAdvanced: () => void;
 }
 
-type ChatMessage = { role: 'dm' | 'player'; text: string; recap?: string; stakes?: string };
+type ChatMessage = { role: 'dm' | 'player' | 'roll'; text: string; recap?: string; stakes?: string };
 
 type RollType = 'ability_check' | 'saving_throw' | 'attack' | 'damage' | 'initiative';
 type AdvantageType = 'advantage' | 'disadvantage' | 'normal' | undefined;
@@ -98,6 +99,9 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [rollRequest, setRollRequest] = useState<RollRequest | null>(null);
   const [rollResult, setRollResult] = useState<RollResult | null>(null);
+  const [retryAction, setRetryAction] = useState<string | null>(null);
+  const [isCharacterOpen, setIsCharacterOpen] = useState(true);
+  const [isJournalOpen, setIsJournalOpen] = useState(true);
 
   useEffect(() => {
     setChat([]);
@@ -121,12 +125,23 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
         recap: record.dm?.recap,
         stakes: record.dm?.stakes,
       });
+      if (record.rolls?.length) {
+        record.rolls.forEach((roll) => {
+          seeded.push({ role: 'roll', text: formatRollSummary(roll.total, roll.breakdown) });
+        });
+      }
     });
     setChat((prev) => (prev.length ? prev : seeded));
     setSuggestions(bundle.suggestions || []);
     const latestRoll = bundle.recaps?.[0]?.dm?.roll_request;
     setRollRequest(latestRoll || null);
   }, [bundle, sessionSlug]);
+
+  useEffect(() => {
+    if (!rollRequest) {
+      setRollResult(null);
+    }
+  }, [rollRequest]);
 
   const abilityBlock: AbilityBlock = useMemo(() => {
     const raw = bundle?.character?.abilities || bundle?.state?.abilities || {};
@@ -142,19 +157,75 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
 
   const abilityMod = (score?: number) => (typeof score === 'number' ? Math.floor((score - 10) / 2) : 0);
 
-  const formatRollLabel = (req: RollRequest) => {
-    const parts = [];
-    if (req.kind === 'ability_check') parts.push('Ability check');
-    if (req.kind === 'saving_throw') parts.push('Saving throw');
-    if (req.kind === 'attack') parts.push('Attack roll');
-    if (req.kind === 'damage') parts.push('Damage roll');
-    if (req.kind === 'initiative') parts.push('Initiative');
-    if (req.skill) parts.push(req.skill);
-    if (req.ability) parts.push(`(${req.ability})`);
-    if (req.advantage && req.advantage !== 'normal') parts.push(req.advantage);
-    if (typeof req.dc === 'number') parts.push(`DC ${req.dc}`);
-    return parts.join(' ');
+  const abilityNames: Record<string, string> = {
+    STR: 'Strength',
+    DEX: 'Dexterity',
+    CON: 'Constitution',
+    INT: 'Intelligence',
+    WIS: 'Wisdom',
+    CHA: 'Charisma',
   };
+
+  const skillToAbility: Record<string, string> = {
+    athletics: 'STR',
+    acrobatics: 'DEX',
+    stealth: 'DEX',
+    sleight: 'DEX',
+    investigation: 'INT',
+    arcana: 'INT',
+    history: 'INT',
+    nature: 'INT',
+    religion: 'INT',
+    perception: 'WIS',
+    insight: 'WIS',
+    survival: 'WIS',
+    medicine: 'WIS',
+    animal: 'WIS',
+    persuasion: 'CHA',
+    deception: 'CHA',
+    intimidation: 'CHA',
+    performance: 'CHA',
+  };
+
+  const titleCase = (value?: string) => (value ? value.replace(/\w\S*/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase()) : '');
+
+  const formatRollRequest = (req: RollRequest) => {
+    const skill = req.skill ? titleCase(req.skill.replace(/_/g, ' ')) : '';
+    const inferredAbility = req.ability || (req.skill ? skillToAbility[req.skill.toLowerCase().split(' ')[0]] : undefined);
+    const abilityLabel = inferredAbility ? abilityNames[inferredAbility] : '';
+    let base = 'Roll';
+
+    if (req.kind === 'ability_check') {
+      if (abilityLabel && skill) base = `Roll a ${abilityLabel} (${skill}) check.`;
+      else if (abilityLabel) base = `Roll a ${abilityLabel} check.`;
+      else if (skill) base = `Roll a ${skill} check.`;
+      else base = 'Roll a check.';
+    } else if (req.kind === 'saving_throw') {
+      base = abilityLabel ? `Roll a ${abilityLabel} saving throw.` : 'Roll a saving throw.';
+    } else if (req.kind === 'attack') {
+      base = 'Roll an attack roll.';
+    } else if (req.kind === 'damage') {
+      base = 'Roll damage.';
+    } else if (req.kind === 'initiative') {
+      base = 'Roll initiative.';
+    }
+
+    if (req.advantage && req.advantage !== 'normal') {
+      base = `${base.replace(/\.$/, '')} with ${req.advantage}.`;
+    }
+
+    return base;
+  };
+
+  const formatRollSummary = (total: number, breakdown: string) => {
+    const normalized = breakdown
+      .replace(/\s*\(([^)]+)\)/g, ' $1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return `Result: ${total} (${normalized})`;
+  };
+
+  const formatRollResult = (result: RollResult) => formatRollSummary(result.total, result.breakdown);
 
   const handleRoll = async () => {
     if (!rollRequest) return;
@@ -175,18 +246,20 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
         throw new Error((data as any).detail);
       }
       setRollResult(data);
-      setInput(data.text);
+      const formatted = formatRollResult(data);
+      setInput(formatted);
+      setChat((prev) => [...prev, { role: 'roll', text: formatted }]);
     } catch (e: any) {
-      setError('The DM could not respond. Try again in a moment.');
+      setError('The DM gestures for a pause. Try again in a moment.');
     }
   };
 
-  const sendAction = async () => {
-    if (!input.trim()) return;
+  const sendAction = async (override?: string) => {
+    const actionText = (override ?? input).trim();
+    if (!actionText) return;
     setSending(true);
     setError(null);
-    const actionText = input.trim();
-    setChat((prev) => [...prev, { role: 'player', text: actionText }]);
+    setRetryAction(null);
     try {
       const response = await fetch(`/api/sessions/${sessionSlug}/player/turn`, {
         method: 'POST',
@@ -199,6 +272,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
       }
       setChat((prev) => [
         ...prev,
+        { role: 'player', text: actionText },
         {
           role: 'dm',
           text: data.narration.narration,
@@ -213,7 +287,8 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
       queryClient.invalidateQueries({ queryKey: ['player-bundle', sessionSlug] });
       refetch();
     } catch (e: any) {
-      setError('The DM could not respond. Try again in a moment.');
+      setRetryAction(actionText);
+      setError('The DM raises a hand mid-sentence. Give it a breath, then try again.');
     } finally {
       setSending(false);
     }
@@ -242,18 +317,32 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
     'Pause to plan',
   ];
 
+  const characterName = bundle?.character?.name || 'Adventurer';
+  const characterClass = bundle?.character?.class || bundle?.character?.class_name || bundle?.character?.className || 'Wanderer';
+  const location = bundle?.state?.location || 'Unknown location';
+  const hpCurrent = bundle?.state?.hp ?? bundle?.character?.hp ?? '-';
+  const hpMax = bundle?.state?.max_hp ?? bundle?.character?.max_hp;
+  const acValue = bundle?.state?.ac ?? bundle?.character?.ac ?? '-';
+  const hpLabel = hpMax ? `${hpCurrent} / ${hpMax}` : `${hpCurrent}`;
+
   return (
     <div className="player-table">
       <style>{tableCSS}</style>
-      <header className="table-header">
-        <div>
-          <p className="eyebrow">Session</p>
-          <h2>{bundle?.character?.name || 'Adventurer'} at the table</h2>
-          <p className="subtle">{bundle?.state?.location || 'Unknown location'} • Turn {bundle?.state?.turn ?? 0}</p>
+      <header className="session-header">
+        <div className="session-core">
+          <div className="session-title">
+            <h2>{characterName}</h2>
+            <span className="class-pill">{characterClass}</span>
+          </div>
+          <div className="session-meta">
+            <span>{location}</span>
+            <span>HP {hpLabel}</span>
+            <span>AC {acValue}</span>
+          </div>
         </div>
         <div className="header-actions">
-          <button className="ghost" onClick={onBack}>Back to start</button>
-          <button className="linkish" onClick={onAdvanced}>Advanced</button>
+          <button className="ghost" onClick={onBack}>Leave table</button>
+          <button className="linkish" onClick={onAdvanced}>Settings</button>
         </div>
       </header>
 
@@ -263,7 +352,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
             {chat.length === 0 && <div className="panel">No turns yet. Tell the DM what you do.</div>}
             {chat.map((msg, idx) => (
               <div key={idx} className={`chat-line ${msg.role}`}>
-                <div className="chat-label">{msg.role === 'dm' ? 'DM' : 'You'}</div>
+                <div className="chat-label">{msg.role === 'dm' ? 'DM' : msg.role === 'roll' ? 'Roll' : 'You'}</div>
                 <div className="chat-text">{msg.text}</div>
                 {msg.recap && <div className="chat-recap">{msg.recap}</div>}
                 {msg.stakes && <div className="chat-stakes">Stakes: {msg.stakes}</div>}
@@ -273,8 +362,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
           {rollRequest && (
             <div className="roll-panel">
               <div>
-                <div className="roll-title">Roll requested</div>
-                <div className="roll-desc">{formatRollLabel(rollRequest)}</div>
+                <div className="roll-title">{formatRollRequest(rollRequest)}</div>
                 {rollRequest.reason && <div className="subtle">{rollRequest.reason}</div>}
               </div>
               <div className="roll-actions">
@@ -283,7 +371,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
               </div>
               {rollResult && (
                 <div className="roll-result">
-                  Result: {rollResult.text}
+                  {formatRollResult(rollResult)}
                 </div>
               )}
             </div>
@@ -299,16 +387,24 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
             />
             <div className="composer-actions">
               <div className="suggestions">
-                <div className="suggestions-label">Suggestions (you can do anything):</div>
+                <div className="suggestions-label">Suggestions</div>
+                <div className="suggestions-note">You can do anything. These are just ideas.</div>
                 <div className="suggestion-chips">
                   {displaySuggestions.slice(0, 5).map((suggestion) => (
                     <button key={suggestion} onClick={() => setInput(suggestion)}>{suggestion}</button>
                   ))}
                 </div>
               </div>
-              <button className="primary" onClick={sendAction} disabled={sending}>{sending ? 'Sending...' : 'Send'}</button>
+              <button className="primary" onClick={() => sendAction()} disabled={sending}>{sending ? 'Sending...' : 'Send'}</button>
             </div>
-            {error && <div className="error">{error}</div>}
+            {error && (
+              <div className="error">
+                <div>{error}</div>
+                {retryAction && (
+                  <button className="ghost" onClick={() => sendAction(retryAction)}>Retry</button>
+                )}
+              </div>
+            )}
             {isFetching && <div className="subtle">Refreshing table...</div>}
           </div>
         </section>
@@ -317,93 +413,109 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
           <div className="card">
             <div className="card-header">
               <div>
-                <h3>Character</h3>
+                <h3>Character Sheet</h3>
                 <p className="subtle">{bundle?.character?.race || bundle?.character?.ancestry || 'Unknown'}</p>
               </div>
-              <div className="stat">
-                <div className="label">AC</div>
-                <div className="value">{bundle?.state?.ac ?? bundle?.character?.ac ?? '-'}</div>
-              </div>
-              <div className="stat">
-                <div className="label">HP</div>
-                <div className="value">
-                  {bundle?.state?.hp ?? '-'}{bundle?.state?.max_hp ? ` / ${bundle?.state?.max_hp}` : ''}
+              <button className="toggle" onClick={() => setIsCharacterOpen((prev) => !prev)}>
+                {isCharacterOpen ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {isCharacterOpen && (
+              <div className="card-body">
+                <div className="stat-row">
+                  <div className="stat">
+                    <div className="label">AC</div>
+                    <div className="value">{bundle?.state?.ac ?? bundle?.character?.ac ?? '-'}</div>
+                  </div>
+                  <div className="stat">
+                    <div className="label">HP</div>
+                    <div className="value">
+                      {bundle?.state?.hp ?? '-'}{bundle?.state?.max_hp ? ` / ${bundle?.state?.max_hp}` : ''}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="abilities-grid">
-              {abilityKeys.map((key) => (
-                <div key={key} className="ability-pill">
-                  <div className="label">{key.toUpperCase()}</div>
-                  <div className="value">{abilityBlock[key]}</div>
-                  <div className="subtle">Mod {abilityMod(abilityBlock[key]) >= 0 ? '+' : ''}{abilityMod(abilityBlock[key])}</div>
-                </div>
-              ))}
-            </div>
-            <div className="section">
-              <h4>Inventory</h4>
-              <ul>
-                {(bundle?.state?.inventory || bundle?.character?.inventory || []).map((item: string) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="section">
-              <h4>Spells</h4>
-              {bundle?.state?.spells || bundle?.character?.spells ? (
-                <ul>
-                  {(bundle?.state?.spells || bundle?.character?.spells || []).map((spell: string) => (
-                    <li key={spell}>{spell}</li>
+                <div className="abilities-grid">
+                  {abilityKeys.map((key) => (
+                    <div key={key} className="ability-pill">
+                      <div className="label">{key.toUpperCase()}</div>
+                      <div className="value">{abilityBlock[key]}</div>
+                      <div className="subtle">Mod {abilityMod(abilityBlock[key]) >= 0 ? '+' : ''}{abilityMod(abilityBlock[key])}</div>
+                    </div>
                   ))}
-                </ul>
-              ) : (
-                <p className="subtle">No spells recorded.</p>
-              )}
-            </div>
+                </div>
+                <div className="section">
+                  <h4>Inventory</h4>
+                  <ul>
+                    {(bundle?.state?.inventory || bundle?.character?.inventory || []).map((item: string) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="section">
+                  <h4>Spells</h4>
+                  {bundle?.state?.spells || bundle?.character?.spells ? (
+                    <ul>
+                      {(bundle?.state?.spells || bundle?.character?.spells || []).map((spell: string) => (
+                        <li key={spell}>{spell}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="subtle">No spells recorded.</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card">
             <div className="card-header">
               <h3>Journal</h3>
+              <button className="toggle" onClick={() => setIsJournalOpen((prev) => !prev)}>
+                {isJournalOpen ? 'Hide' : 'Show'}
+              </button>
             </div>
-            <div className="section">
-              <h4>Adventure hook</h4>
-              <p>{bundle?.state?.adventure_hook?.label || 'Not set yet.'}</p>
-            </div>
-            <div className="section">
-              <h4>Last recap</h4>
-              <p>{bundle?.recaps?.[0]?.dm?.recap || 'No recap yet.'}</p>
-            </div>
-            <div className="section">
-              <h4>Quests</h4>
-              {bundle?.quests && Object.keys(bundle.quests).length > 0 ? (
-                <ul>
-                  {Object.values(bundle.quests).map((quest: any) => (
-                    <li key={quest.id || quest.name || quest.title}>
-                      <strong>{quest.title || quest.name || quest.id}</strong>
-                      {quest.status && <span className="subtle"> · {quest.status}</span>}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="subtle">No active quests.</p>
-              )}
-            </div>
-            <div className="section">
-              <h4>Discoveries & Rumors</h4>
-              {bundle?.discoveries && bundle.discoveries.length > 0 ? (
-                <ul>
-                  {bundle.discoveries.map((disc) => (
-                    <li key={disc.name + disc.discovery_type}>
-                      <strong>{disc.name || disc.discovery_type}</strong>
-                      {disc.description && <div className="subtle">{disc.description}</div>}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="subtle">Nothing noted yet.</p>
-              )}
-            </div>
+            {isJournalOpen && (
+              <div className="card-body">
+                <div className="section">
+                  <h4>Adventure hook</h4>
+                  <p>{bundle?.state?.adventure_hook?.label || 'Not set yet.'}</p>
+                </div>
+                <div className="section">
+                  <h4>Last recap</h4>
+                  <p>{bundle?.recaps?.[0]?.dm?.recap || 'No recap yet.'}</p>
+                </div>
+                <div className="section">
+                  <h4>Quests</h4>
+                  {bundle?.quests && Object.keys(bundle.quests).length > 0 ? (
+                    <ul>
+                      {Object.values(bundle.quests).map((quest: any) => (
+                        <li key={quest.id || quest.name || quest.title}>
+                          <strong>{quest.title || quest.name || quest.id}</strong>
+                          {quest.status && <span className="subtle"> - {quest.status}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="subtle">No active quests.</p>
+                  )}
+                </div>
+                <div className="section">
+                  <h4>Discoveries & Rumors</h4>
+                  {bundle?.discoveries && bundle.discoveries.length > 0 ? (
+                    <ul>
+                      {bundle.discoveries.map((disc) => (
+                        <li key={disc.name + disc.discovery_type}>
+                          <strong>{disc.name || disc.discovery_type}</strong>
+                          {disc.description && <div className="subtle">{disc.description}</div>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="subtle">Nothing noted yet.</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </aside>
       </main>
@@ -420,11 +532,25 @@ const tableCSS = `
   padding: 28px 32px 80px;
   color: #2d1b0b;
 }
-.table-header {
+.session-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
+.session-core { display: flex; flex-direction: column; gap: 6px; }
+.session-title { display: flex; align-items: center; gap: 10px; }
+.session-title h2 { margin: 0; font-size: 24px; }
+.class-pill {
+  background: #fffaf3;
+  border: 1px solid #d9c3a3;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.session-meta { display: flex; gap: 14px; font-size: 13px; color: #6d5138; flex-wrap: wrap; }
 .subtle { color: #6d5138; font-size: 13px; margin: 0; }
 .header-actions { display: flex; gap: 10px; }
 .table-layout {
@@ -456,9 +582,11 @@ const tableCSS = `
   background: #fffaf3;
   border: 1px solid #ecd7b6;
 }
-.chat-line.dm { border-color: #c19a6b; }
-.chat-label { font-weight: 700; color: #8c5a2b; }
-.chat-text { margin: 4px 0; }
+.chat-line.dm { border-color: #c19a6b; background: #fff7ea; }
+.chat-line.player { align-self: flex-end; background: #fff; border-color: #e1c9a2; }
+.chat-line.roll { background: #f1efe9; border-style: dashed; }
+.chat-label { font-weight: 700; color: #8c5a2b; text-transform: uppercase; font-size: 12px; letter-spacing: 0.08em; }
+.chat-text { margin: 6px 0 2px; white-space: pre-wrap; }
 .chat-recap { color: #4a2f1b; font-size: 13px; }
 .chat-stakes { color: #8c5a2b; font-size: 12px; }
 .roll-panel {
@@ -472,7 +600,6 @@ const tableCSS = `
   gap: 10px;
 }
 .roll-title { font-weight: 700; color: #2d1b0b; }
-.roll-desc { color: #4a2f1b; }
 .roll-actions { display: flex; align-items: center; gap: 10px; }
 .dc-pill {
   padding: 6px 10px;
@@ -500,6 +627,7 @@ const tableCSS = `
 }
 .suggestions { flex: 1; }
 .suggestions-label { font-size: 12px; color: #6d5138; margin-bottom: 6px; }
+.suggestions-note { font-size: 12px; color: #6d5138; margin-bottom: 8px; }
 .suggestion-chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .suggestion-chips button {
   border-radius: 20px;
@@ -526,10 +654,12 @@ const tableCSS = `
   padding: 14px;
   box-shadow: 0 12px 24px rgba(0,0,0,0.04);
 }
-.card-header { display: flex; align-items: center; gap: 10px; }
+.card-header { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.card-body { margin-top: 10px; }
 .stat { background: #fffaf3; border: 1px solid #ecd7b6; border-radius: 10px; padding: 6px 10px; }
 .stat .label { font-size: 12px; color: #6d5138; }
 .stat .value { font-weight: 800; color: #2d1b0b; }
+.stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .abilities-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
@@ -559,11 +689,29 @@ const tableCSS = `
   padding: 8px 10px;
   border-radius: 8px;
   margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.toggle {
+  border-radius: 999px;
+  padding: 6px 12px;
+  border: 1px solid #d9c3a3;
+  background: #fffaf3;
+  color: #6d5138;
+  font-weight: 700;
+  cursor: pointer;
 }
 @media (max-width: 1000px) {
   .table-layout { grid-template-columns: 1fr; }
   .chat-feed { max-height: none; }
+  .session-header { flex-direction: column; align-items: flex-start; }
 }
 `;
 
 export default PlayerTable;
+
+
+
+
