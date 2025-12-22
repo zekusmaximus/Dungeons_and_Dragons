@@ -1,0 +1,47 @@
+{
+  "slug": "adventure",
+  "name": "Sable",
+  "race": "Human",
+  "class": "Fighter",
+  "background": "Wanderer",
+  "level": 1,
+  "hp": 11,
+  "ac": 13,
+  "abilities": {
+    "str": 15,
+    "dex": 14,
+    "con": 13,
+    "int": 12,
+    "wis": 10,
+    "cha": 8
+  },
+  "skills": {
+    "perception": 2
+  },
+  "proficiencies": {
+    "skills": [
+      "perception"
+    ],
+    "tools": [],
+    "languages": [
+      "Common"
+    ]
+  },
+  "inventory": [
+    "Leather armor",
+    "Shortsword",
+    "Shortbow (20 arrows)",
+    "Explorer's pack"
+  ],
+  "starting_equipment": [
+    "Leather armor",
+    "Shortsword",
+    "Shortbow (20 arrows)",
+    "Explorer's pack"
+  ],
+  "features": [],
+  "notes": "",
+  "creation_source": "player",
+  "spells": [],
+  "method": "standard"
+}

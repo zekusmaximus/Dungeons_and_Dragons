@@ -155,6 +155,8 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
     };
   }, [bundle]);
 
+  const abilityKeys: (keyof AbilityBlock)[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+
   const abilityMod = (score?: number) => (typeof score === 'number' ? Math.floor((score - 10) / 2) : 0);
 
   const abilityNames: Record<string, string> = {

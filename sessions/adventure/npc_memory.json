@@ -1,0 +1,12 @@
+{
+  "npcs": [
+    {
+      "name": "Gate Sergeant Ilya",
+      "impression": "Firm but fair; respects clear boundaries.",
+      "last_interaction": "Initial arrival; requested travel papers.",
+      "promises": "Will allow leniency if the rogue helps with contraband reports.",
+      "faction_ties": ["iron-syndicate"],
+      "tone_notes": "Responds to heroic or journalistic narration; distrusts noir cynicism."
+    }
+  ]
+}

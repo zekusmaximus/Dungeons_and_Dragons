@@ -1,0 +1,1 @@
+{"timestamp": "2025-12-22T16:53:29.646350+00:00", "turn": 0, "scene_id": "init", "summary": "Initialized session state", "diffs": {"hp": 0, "inventory": [], "flags": {}}, "rolls": [], "rules": ["Initialization"]}

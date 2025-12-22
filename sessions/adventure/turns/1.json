@@ -1,0 +1,45 @@
+{
+  "turn": 1,
+  "player_intent": "Opening scene",
+  "diff": [
+    "turn: 0 -> 1"
+  ],
+  "consequence_echo": "turn: 0 -> 1",
+  "dm": {
+    "narration": "Scene: Sable arrives at Camp, drawn toward a Classic dungeon lead.\nImmediate problem: A sealed stairwell yawns open as fresh tremors shake the stonework.\nReason: A lead from your past points to something valuable buried below.\nQuestion: What do you do?",
+    "recap": "Opening scene for adventure.",
+    "stakes": "Act quickly to shape the tone of this adventure.",
+    "choices": [
+      {
+        "id": "A",
+        "text": "Ask locals about Camp",
+        "intent_tag": "talk",
+        "risk": "low"
+      },
+      {
+        "id": "B",
+        "text": "Probe quietly for weak spots",
+        "intent_tag": "sneak",
+        "risk": "medium"
+      },
+      {
+        "id": "C",
+        "text": "Force the issue with bold action",
+        "intent_tag": "fight",
+        "risk": "high"
+      },
+      {
+        "id": "D",
+        "text": "Study the scene for clues or magic traces",
+        "intent_tag": "investigate",
+        "risk": "medium"
+      }
+    ],
+    "discovery_added": null,
+    "consequence_echo": "turn: 0 -> 1",
+    "choices_fallback": true,
+    "roll_request": null
+  },
+  "created_at": "2025-12-22T16:54:33.067099Z",
+  "rolls": null
+}
