@@ -1,0 +1,13 @@
+[
+  {
+    "discovery_id": "disc-20251223161147-151",
+    "name": "Rumor about Camp",
+    "discovery_type": "rumor",
+    "description": "A fresh rumor surfaces, hinting at something hidden nearby.",
+    "location": "Camp",
+    "discovered_at": "2025-12-23T16:11:47.679590+00:00",
+    "importance": 1,
+    "related_quest": null,
+    "rewards": []
+  }
+]

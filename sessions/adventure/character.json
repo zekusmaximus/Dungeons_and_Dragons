@@ -1,19 +1,19 @@
 {
   "slug": "adventure",
-  "name": "Sable",
+  "name": "Zekusmaximus",
   "race": "Human",
   "class": "Fighter",
   "background": "Wanderer",
   "level": 1,
-  "hp": 11,
-  "ac": 13,
+  "hp": 12,
+  "ac": 18,
   "abilities": {
     "str": 15,
-    "dex": 14,
-    "con": 13,
-    "int": 12,
+    "dex": 13,
+    "con": 14,
+    "int": 10,
     "wis": 10,
-    "cha": 8
+    "cha": 10
   },
   "skills": {
     "perception": 2
@@ -28,20 +28,20 @@
     ]
   },
   "inventory": [
-    "Leather armor",
-    "Shortsword",
-    "Shortbow (20 arrows)",
-    "Explorer's pack"
+    "Chain mail",
+    "Shield",
+    "Longsword",
+    "Dungeoneer's pack"
   ],
   "starting_equipment": [
-    "Leather armor",
-    "Shortsword",
-    "Shortbow (20 arrows)",
-    "Explorer's pack"
+    "Chain mail",
+    "Shield",
+    "Longsword",
+    "Dungeoneer's pack"
   ],
   "features": [],
   "notes": "",
   "creation_source": "player",
   "spells": [],
-  "method": "standard"
+  "method": "point-buy"
 }
