@@ -17,8 +17,8 @@ def _seed_entropy(path: Path, count: int = 10) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-@pytest.fixture()
-def repo_root(tmp_path, monkeypatch):
+@pytest.fixture(params=["file", "sqlite"])
+def repo_root(tmp_path, monkeypatch, request):
     sessions_dir = tmp_path / "sessions"
     data_dir = tmp_path / "data"
     worlds_dir = tmp_path / "worlds"
@@ -66,11 +66,19 @@ def repo_root(tmp_path, monkeypatch):
     (worlds_dir / "default").mkdir(parents=True, exist_ok=True)
     _seed_entropy(dice_path)
 
+    backend_name = request.param
+    db_path = tmp_path / "dm.sqlite"
+
     monkeypatch.setenv("DM_SERVICE_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("DM_SERVICE_SESSIONS_DIR", "sessions")
     monkeypatch.setenv("DM_SERVICE_DATA_DIR", "data")
     monkeypatch.setenv("DM_SERVICE_WORLDS_DIR", "worlds")
     monkeypatch.setenv("DM_SERVICE_DICE_FILE", "dice/entropy.ndjson")
+    monkeypatch.setenv("STORAGE_BACKEND", backend_name)
+    if backend_name == "sqlite":
+        monkeypatch.setenv("DATABASE_URL", str(db_path))
+    else:
+        monkeypatch.delenv("DATABASE_URL", raising=False)
 
     from service.config import get_settings
 
