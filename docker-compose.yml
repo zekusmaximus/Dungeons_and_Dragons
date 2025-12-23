@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  dm:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      STORAGE_BACKEND: sqlite
+      SQLITE_PATH: /data/dm.sqlite
+      DM_API_KEY: ${DM_API_KEY:-}
+    volumes:
+      - dm_data:/data
+    command: uvicorn service.app:app --host 0.0.0.0 --port 8000
+
+volumes:
+  dm_data:

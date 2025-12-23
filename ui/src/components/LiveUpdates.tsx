@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createApiEventSource } from '../apiBase';
 
 interface LiveUpdatesProps {
   sessionSlug: string;
@@ -8,7 +9,7 @@ interface LiveUpdatesProps {
 
 const LiveUpdates: React.FC<LiveUpdatesProps> = ({ sessionSlug, onTranscriptUpdate, onLockUpdate }) => {
   useEffect(() => {
-    const eventSource = new EventSource(`/api/events/${sessionSlug}`);
+    const eventSource = createApiEventSource(`/api/events/${sessionSlug}`);
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);

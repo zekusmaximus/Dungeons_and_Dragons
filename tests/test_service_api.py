@@ -1,12 +1,12 @@
 def test_health(client):
-    response = client.get("/health")
+    response = client.get("/api/health")
     assert response.status_code == 200
     payload = response.json()
     assert "status" in payload
 
 
 def test_session_create_and_state(client, session_slug):
-    response = client.get(f"/sessions/{session_slug}/state")
+    response = client.get(f"/api/sessions/{session_slug}/state")
     assert response.status_code == 200
     payload = response.json()
     assert "turn" in payload
@@ -19,7 +19,7 @@ def test_session_create_and_state(client, session_slug):
 
 
 def test_player_bundle_shape(client, session_slug):
-    response = client.get(f"/sessions/{session_slug}/player")
+    response = client.get(f"/api/sessions/{session_slug}/player")
     assert response.status_code == 200
     payload = response.json()
     for key in ("state", "character", "recaps", "discoveries", "quests", "suggestions"):

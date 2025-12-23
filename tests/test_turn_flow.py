@@ -1,5 +1,5 @@
 def test_preview_commit_flow(client, session_slug):
-    state_before = client.get(f"/sessions/{session_slug}/state").json()
+    state_before = client.get(f"/api/sessions/{session_slug}/state").json()
     log_index_before = state_before["log_index"]
     turn_before = state_before["turn"]
 
@@ -11,7 +11,7 @@ def test_preview_commit_flow(client, session_slug):
         "dice_expressions": ["1d20", "1d20"],
     }
     preview_response = client.post(
-        f"/sessions/{session_slug}/turn/preview",
+        f"/api/sessions/{session_slug}/turn/preview",
         json=preview_request,
     )
     assert preview_response.status_code == 200
@@ -21,7 +21,7 @@ def test_preview_commit_flow(client, session_slug):
     assert preview_payload["entropy_plan"]["indices"] == [log_index_before + 1, log_index_before + 2]
 
     commit_response = client.post(
-        f"/sessions/{session_slug}/turn/commit",
+        f"/api/sessions/{session_slug}/turn/commit",
         json={"preview_id": preview_payload["id"]},
     )
     assert commit_response.status_code == 200
@@ -30,7 +30,7 @@ def test_preview_commit_flow(client, session_slug):
     assert commit_payload["state"]["log_index"] == log_index_before + 2
 
     transcript_response = client.get(
-        f"/sessions/{session_slug}/transcript",
+        f"/api/sessions/{session_slug}/transcript",
         params={"tail": 1},
     )
     assert transcript_response.status_code == 200
@@ -40,7 +40,7 @@ def test_preview_commit_flow(client, session_slug):
     assert transcript_payload["items"][-1]["text"] == preview_request["transcript_entry"]
 
     changelog_response = client.get(
-        f"/sessions/{session_slug}/changelog",
+        f"/api/sessions/{session_slug}/changelog",
         params={"tail": 1},
     )
     assert changelog_response.status_code == 200

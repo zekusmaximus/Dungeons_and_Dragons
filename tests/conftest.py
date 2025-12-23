@@ -74,6 +74,7 @@ def repo_root(tmp_path, monkeypatch, request):
     monkeypatch.setenv("DM_SERVICE_DATA_DIR", "data")
     monkeypatch.setenv("DM_SERVICE_WORLDS_DIR", "worlds")
     monkeypatch.setenv("DM_SERVICE_DICE_FILE", "dice/entropy.ndjson")
+    monkeypatch.delenv("DM_API_KEY", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", backend_name)
     if backend_name == "sqlite":
         monkeypatch.setenv("DATABASE_URL", str(db_path))
@@ -98,6 +99,6 @@ def client(repo_root):
 @pytest.fixture()
 def session_slug(client):
     payload = {"slug": "test-session", "template_slug": "example-rogue"}
-    response = client.post("/sessions", json=payload)
+    response = client.post("/api/sessions", json=payload)
     assert response.status_code == 201
     return response.json()["slug"]

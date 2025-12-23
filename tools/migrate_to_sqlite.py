@@ -10,8 +10,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from service import storage
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import re
+
+from fastapi import HTTPException, status
+from pydantic import ValidationError
+
 from service.config import Settings
+from service.models import SessionState
 from service.storage_backends.sqlite_backend import (
     SQLiteDatabase,
     SQLiteGenericDocStore,
@@ -33,6 +42,8 @@ DOC_FILES = {
     "last_discovery": "last_discovery.json",
     "auto_save": "auto_save.json",
 }
+
+_SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 @dataclass
@@ -62,6 +73,16 @@ class ImportResult:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _validate_state(state: Dict) -> SessionState:
+    try:
+        return SessionState(**state)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"State validation failed: {exc}",
+        )
 
 
 def _normalize_db_path(raw: str, base: Path) -> Path:
@@ -280,7 +301,7 @@ def import_session(
     overwrite: bool,
     include_previews: bool,
 ) -> ImportResult:
-    if not storage._SLUG_PATTERN.match(paths.slug):
+    if not _SLUG_PATTERN.match(paths.slug):
         return ImportResult(slug=paths.slug, imported=False, reason="invalid slug")
     if not paths.state_path.exists():
         return ImportResult(slug=paths.slug, imported=False, reason="missing state.json")
@@ -295,7 +316,7 @@ def import_session(
     state_data = _load_json(paths.state_path)
     if state_data is None:
         return ImportResult(slug=paths.slug, imported=False, reason="state unreadable")
-    validated_state = storage._validate_state(state_data).model_dump(mode="json")
+    validated_state = _validate_state(state_data).model_dump(mode="json")
 
     transcript_lines = _text_lines(paths.transcript_path)
     changelog_lines = _text_lines(paths.changelog_path)

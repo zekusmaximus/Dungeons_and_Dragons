@@ -1,40 +1,76 @@
 # Repo-as-Game: Solo D&D-Style Adventure
 
-This repository is a deterministic, file-backed solo D&D experience. A FastAPI backend reads/writes the same session files a human DM would use, and a React/Vite UI surfaces them with a `/api` proxy. The contract for how the Dungeon Master operates is defined in `PROTOCOL.md`, and all randomness is pulled from `dice/entropy.ndjson` so play is reproducible.
+This repository is a deterministic, file-backed solo D&D experience. A FastAPI backend reads/writes the same session files a human DM would use, and a React/Vite UI is served at `/` with the API mounted at `/api`. The contract for how the Dungeon Master operates is defined in `PROTOCOL.md`, and all randomness is pulled from `dice/entropy.ndjson` so play is reproducible.
 
-## First playable session (clone → play)
-
-1. **Create a virtualenv and install the service**
+## Single-process quickstart (UI + API)
+1. Install backend deps
    ```bash
    python -m venv .venv
    source .venv/bin/activate
    pip install -r service/requirements.txt
    ```
-2. **Run the FastAPI backend (port 8000)**
+2. Build the UI once
    ```bash
-   uvicorn service.app:app --reload --port 8000
+   npm --prefix ui install
+   npm --prefix ui run build
    ```
-   Optional env vars:
-   - `DM_SERVICE_LLM_API_KEY` / `DM_SERVICE_LLM_MODEL` / `DM_SERVICE_LLM_BASE_URL` to set defaults.
-3. **Start the UI (port 5173, proxied to `/api`)**
+3. Run the combined server (serves UI at `/`, API at `/api`)
    ```bash
-   cd ui
-   npm install
-   npm run dev
+   uvicorn service.app:app --host 0.0.0.0 --port 8000
    ```
-4. **Play using the shipped session**
-   - Open `http://localhost:5173`.
-   - Pick **example-rogue** in the Lobby.
-   - Open **Settings → LLM Configuration** to POST `/api/llm/config` with your API key if you did not set an env var. Keys are stored locally in `.dm_llm_config.json` (git-ignored).
-   - The UI reads `turn.md` and `state.json` from `sessions/example-rogue` and will use `/api/llm/narrate` for story beats once a key is present.
+
+Key environment variables:
+- `STORAGE_BACKEND` (`file` | `sqlite`, default sqlite)
+- `SQLITE_PATH` / `DATABASE_URL` (default `dm.sqlite` in the repo root)
+- `DM_API_KEY` (optional; when set, `X-API-Key` is required on mutating + LLM routes)
+- `VITE_API_BASE_URL` for UI builds and the dev proxy (default `/api`)
+- `DM_SERVICE_LLM_API_KEY` / `DM_SERVICE_LLM_MODEL` / `DM_SERVICE_LLM_BASE_URL` to set LLM defaults
+
+## Dev mode (hot reload)
+- Backend: `uvicorn service.app:app --reload --port 8000`
+- Frontend: `VITE_API_BASE_URL=http://localhost:8000 npm run dev --prefix ui` (proxy stays on `/api`)
+- Open `http://localhost:5173`
+
+## Docker
+```bash
+docker build -t dm-app .
+docker run -p 8000:8000 -v dm_data:/data dm-app
+```
+Environment used in the container: `STORAGE_BACKEND=sqlite` (default), `SQLITE_PATH=/data/dm.sqlite` (default), `DM_API_KEY` (optional). `docker-compose up` will build, expose port 8000, and persist `/data` automatically.
+
+## Troubleshooting
+- UI loads but API calls 404: verify the FastAPI service is running and reachable; confirm the UI build/proxy points at `/api` (or set `VITE_API_BASE_URL` for an alternate host).
+- API 401 unauthorized: check whether `DM_API_KEY` is set in the environment; if so, include `X-API-Key` on all mutating routes and `/api/llm/*`.
+- SQLite path/volume issues: ensure `SQLITE_PATH`/`DATABASE_URL` points to a writable location (e.g., `/data/dm.sqlite` in Docker) and that the volume is mounted with write permissions.
 
 ## Player Mode Quickstart
 Player Mode is now the default landing page.
-1. Run the backend (`uvicorn service.app:app --reload --port 8000`) and the UI (`cd ui && npm run dev`).
-2. Open `http://localhost:5173` and choose **Start new adventure**. A fresh session is created from the template you enter (default `example-rogue`).
+1. Run the combined server (or `docker run` above).
+2. Open `http://localhost:8000` and choose **Start new adventure**. A fresh session is created from the template you enter (default `example-rogue`).
 3. The Character Wizard walks through concept, abilities (standard array by default; roll/point-buy optional), proficiencies, equipment, and review. Pick a starting hook on the final step. Submitting persists the hero to `sessions/<slug>/character.json`, updates session state, and triggers the opening scene.
 4. Play at the **Player Table**: free-text chat with the DM, suggestion buttons beneath the input, character sheet panel (AC/HP/stats/gear/spells), and a journal with quests, discoveries, and the latest recap.
 5. Need the deterministic controls? Click the small **Advanced** link to open the existing dashboard at `/advanced`.
+
+## Minimal auth
+- When `DM_API_KEY` is unset: open dev mode, no auth required.
+- When `DM_API_KEY` is set: send `X-API-Key: <value>` on all POST/PUT/PATCH/DELETE calls and on `/api/llm/*` (config + narration). Read-only routes stay open.
+
+## Smoke test (expected to work locally)
+```bash
+npm --prefix ui run build
+uvicorn service.app:app --host 0.0.0.0 --port 8000 &
+SERVER_PID=$!
+sleep 2
+curl -f http://localhost:8000/api/health
+curl -f -X POST http://localhost:8000/api/sessions -H "Content-Type: application/json" -d '{"slug":"demo","template_slug":"example-rogue"}'
+preview_id=$(curl -sf -X POST http://localhost:8000/api/sessions/demo/turn/preview -H "Content-Type: application/json" -d '{"response":"look around","state_patch":{"location":"camp"},"transcript_entry":"peek","dice_expressions":[]}' | python - <<'PY'
+import json,sys
+print(json.load(sys.stdin)["id"])
+PY
+)
+curl -f -X POST http://localhost:8000/api/sessions/demo/turn/commit -H "Content-Type: application/json" -d "{\"preview_id\":\"$preview_id\"}"
+kill $SERVER_PID
+```
 
 ## LLM configuration
 - Backend defaults are read from environment variables; POST `/api/llm/config` persists overrides to `.dm_llm_config.json` in the repo root (not committed).

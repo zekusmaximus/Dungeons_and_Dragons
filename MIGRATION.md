@@ -1,9 +1,15 @@
 # Migrating file-backed sessions into SQLite
 
-This repository now supports a SQLite storage backend. Use `tools/migrate_to_sqlite.py` to ingest existing on-disk sessions and dice entropy into a standalone SQLite database.
+This repository now supports a SQLite storage backend. Use `tools.migrate_to_sqlite` to ingest existing on-disk sessions and dice entropy into a standalone SQLite database.
 
 ## Usage
 
+Primary (module) invocation:
+```
+python -m tools.migrate_to_sqlite --source <path_to_repo_or_export> --db <sqlite_path_or_url>
+```
+
+Script invocation (also supported):
 ```
 python tools/migrate_to_sqlite.py --source <path_to_repo_or_export> --db <sqlite_path_or_url>
 ```
@@ -22,22 +28,22 @@ Common flags:
 
 Import everything from the current repo into a local DB:
 ```
-python tools/migrate_to_sqlite.py --source . --db dm.sqlite
+python -m tools.migrate_to_sqlite --source . --db dm.sqlite
 ```
 
 Import a specific session, overwriting any existing copy:
 ```
-python tools/migrate_to_sqlite.py --source . --db dm.sqlite --slugs hook-002 --overwrite
+python -m tools.migrate_to_sqlite --source . --db dm.sqlite --slugs hook-002 --overwrite
 ```
 
 Dry-run to see what would happen:
 ```
-python tools/migrate_to_sqlite.py --source /exports/dm --db sqlite:///dm.sqlite --dry-run
+python -m tools.migrate_to_sqlite --source /exports/dm --db sqlite:///dm.sqlite --dry-run
 ```
 
 Include previews (rarely needed):
 ```
-python tools/migrate_to_sqlite.py --source . --db dm.sqlite --include-previews
+python -m tools.migrate_to_sqlite --source . --db dm.sqlite --include-previews
 ```
 
 ## What gets imported

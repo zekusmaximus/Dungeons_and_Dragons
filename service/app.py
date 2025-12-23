@@ -2,13 +2,18 @@ from typing import Optional, List, Dict
 from datetime import datetime, timezone
 from http import HTTPStatus
 import json
+import os
 import re
 import random
+from pathlib import Path
 
 import uuid
 
-from fastapi import Depends, FastAPI, Query, HTTPException
+from fastapi import Depends, FastAPI, Query, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import Settings, get_settings
 from .llm import call_llm_api, get_effective_llm_config, persist_llm_config
@@ -32,10 +37,12 @@ from .mood_system import MoodSystem, get_mood_system, Mood
 from .npc_relationships import NPCRelationshipService, get_npc_relationship_service
 from quests.generator import generate_dynamic_quest
 
-app = FastAPI(
+api_app = FastAPI(
     title="Deterministic DM Service",
     description="API surface for deterministic, auditable gameplay data",
 )
+# Legacy alias so route decorators keep working before we wrap with the UI/static host app.
+app = api_app
 
 
 class LLMNarrativeRequest(BaseModel):
@@ -84,6 +91,37 @@ def get_settings_dep() -> Settings:
 
 def _get_backend(settings: Settings) -> StorageBackend:
     return get_storage_backend(settings)
+
+
+_MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_PROTECTED_PREFIXES = (
+    "/llm/config",
+    "/llm/narrate",
+    "/adventure-hooks/generate",
+    "/quests/generate",
+)
+
+
+@app.middleware("http")
+async def api_key_guard(request: Request, call_next):
+    api_key = os.getenv("DM_API_KEY")
+    if not api_key:
+        return await call_next(request)
+
+    path = request.url.path
+    normalized = path[4:] if path.startswith("/api") else path
+    normalized = normalized if normalized.startswith("/") else f"/{normalized}"
+    method = request.method.upper()
+
+    requires_key = method in _MUTATING_METHODS
+    if any(normalized.startswith(prefix) for prefix in _PROTECTED_PREFIXES):
+        requires_key = True
+    if "/llm/narrate" in normalized:
+        requires_key = True
+
+    if requires_key and request.headers.get("X-API-Key") != api_key:
+        return JSONResponse(status_code=HTTPStatus.UNAUTHORIZED, content={"detail": "unauthorized"})
+    return await call_next(request)
 
 
 @app.get("/health")
@@ -1781,3 +1819,42 @@ def session_events(slug: str, settings: Settings = Depends(get_settings_dep)):
         status_code=HTTPStatus.NOT_IMPLEMENTED,
         detail="Server-sent events are not implemented. Use polling endpoints instead.",
     )
+
+
+def _build_main_app() -> FastAPI:
+    """Wrap the API app with static file serving and the /api mount point."""
+    main_app = FastAPI(
+        title="Deterministic DM Service",
+        description="API surface for deterministic, auditable gameplay data",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+    main_app.mount("/api", api_app)
+
+    dist_path = Path(__file__).resolve().parent.parent / "ui" / "dist"
+    static_files = StaticFiles(directory=dist_path, html=True, check_dir=dist_path.exists())
+    main_app.mount("/", static_files, name="ui")
+
+    @main_app.get("/health")
+    def root_health() -> dict:
+        return {"status": "ok"}
+
+    @main_app.exception_handler(StarletteHTTPException)
+    async def spa_fallback(request: Request, exc: StarletteHTTPException):
+        if (
+            exc.status_code == HTTPStatus.NOT_FOUND
+            and not request.url.path.startswith("/api")
+            and "." not in request.url.path.split("/")[-1]
+        ):
+            index_path = dist_path / "index.html"
+            if index_path.exists():
+                return FileResponse(index_path)
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    main_app.state.api_app = api_app
+    return main_app
+
+
+# The app exported for ASGI servers mounts the API under /api and serves the built UI at /.
+app = _build_main_app()
