@@ -263,6 +263,8 @@ class DMNarration(BaseModel):
     consequence_echo: Optional[str] = None
     choices_fallback: bool = False
     roll_request: Optional["RollRequest"] = None
+    state_patch: Dict[str, Any] = Field(default_factory=dict)
+    dice_expressions: List[str] = Field(default_factory=list)
 
 
 class RollLog(BaseModel):

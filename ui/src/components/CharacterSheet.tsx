@@ -95,9 +95,9 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
         <h2>{character.name}</h2>
         <div className="basic-info">
           <span>{character.race} {character.class} Level {character.level}</span>
-          <span>{character.background} • {character.alignment}</span>
+          <span>{character.background} - {character.alignment}</span>
         </div>
-        <button onClick={onClose} className="close-button">×</button>
+        <button onClick={onClose} className="close-button">X</button>
       </div>
 
       <div className="sheet-content">
@@ -204,7 +204,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
                 )}
               </div>
               <div className="gold-display">
-                💰 Gold: {state?.gold ?? state?.gp ?? 0} GP
+                Gold: {state?.gold ?? state?.gp ?? 0} GP
               </div>
             </div>
           </div>

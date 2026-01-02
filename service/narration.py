@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from .config import Settings
 from .llm import call_llm_api
 from .diff_highlights import summarize_diff, derive_consequence_echo
+from .storage import _apply_state_patch, summarize_state_diff
 from .models import DMNarration, DMChoice, DiscoveryItem, RollRequest
 
 
@@ -156,16 +157,35 @@ def _sanitize_dm_payload(
     diff: List[str],
     include_discovery: bool,
     before_state: Optional[Dict],
+    entropy_window_size: int,
 ) -> DMNarration:
     working = dict(payload)
     before = before_state or state
-    highlights = summarize_diff(diff, before, state)
+
+    state_patch = working.get("state_patch", {})
+    if state_patch is None:
+        state_patch = {}
+    if not isinstance(state_patch, dict):
+        raise ValueError("state_patch must be an object")
+    proposed_state = _apply_state_patch(state, state_patch)
+    derived_diff = summarize_state_diff(before, proposed_state)
+    effective_diff = diff or derived_diff
+    highlights = summarize_diff(effective_diff, before, proposed_state)
+
+    raw_dice = working.get("dice_expressions", [])
+    if raw_dice is None:
+        raw_dice = []
+    if not isinstance(raw_dice, list):
+        raise ValueError("dice_expressions must be a list")
+    dice_expressions = [str(entry).strip() for entry in raw_dice if str(entry).strip()]
+    if len(dice_expressions) > entropy_window_size:
+        raise ValueError("dice_expressions exceeds available entropy window")
 
     narration = str(working.get("narration") or "").strip()
     recap = str(working.get("recap") or "").strip()
     stakes = str(working.get("stakes") or "").strip()
     if not narration:
-        narration = f"The scene shifts after {player_intent}. { ' '.join(diff) or 'Tension lingers.' }"
+        narration = f"The scene shifts after {player_intent}. { ' '.join(effective_diff) or 'Tension lingers.' }"
     if not recap:
         recap = f"Turn {state.get('turn', 0)} recap at {state.get('location', 'the field')}."
     if not stakes:
@@ -195,7 +215,7 @@ def _sanitize_dm_payload(
         working.get("consequence_echo"),
         highlights,
         narration,
-        diff,
+        effective_diff,
     )
 
     return DMNarration(
@@ -207,6 +227,8 @@ def _sanitize_dm_payload(
         choices_fallback=choices_fallback or working.get("choices_fallback", False),
         discovery_added=working.get("discovery_added"),
         roll_request=None if not working.get("roll_request") else RollRequest(**working["roll_request"]),
+        state_patch=state_patch,
+        dice_expressions=dice_expressions,
     )
 
 
@@ -340,6 +362,7 @@ async def generate_dm_narration(
     player_intent: str,
     diff: List[str],
     include_discovery: bool = False,
+    entropy_window: Optional[List[Dict]] = None,
 ) -> Tuple[DMNarration, Optional[Dict[str, int]]]:
     prompt = (
         "You are the deterministic DM. Return ONLY valid JSON matching the schema.\n"
@@ -350,9 +373,14 @@ async def generate_dm_narration(
         "  choices: array of 4-5 items with fields {id: A/B/C/D/E, text, intent_tag: talk|sneak|fight|magic|investigate|travel|other, risk: low|medium|high},\n"
         "  discovery_added: optional {title, text},\n"
         "  consequence_echo: optional string summarizing the consequence in 1 line,\n"
-        "  roll_request: optional {kind: ability_check|saving_throw|attack|damage|initiative, ability?: STR|DEX|CON|INT|WIS|CHA, skill?: string, dc?: number, advantage?: advantage|disadvantage|normal, reason?: string}\n"
+        "  roll_request: optional {kind: ability_check|saving_throw|attack|damage|initiative, ability?: STR|DEX|CON|INT|WIS|CHA, skill?: string, dc?: number, advantage?: advantage|disadvantage|normal, reason?: string},\n"
+        "  state_patch: object (only fields from SessionState),\n"
+        "  dice_expressions: array of dice strings (each consumes the next entropy entry)\n"
         "}.\n"
-        "Rules: concise, grounded in provided state; keep outputs safe; do not add dice unless roll_request is present. Only include roll_request when a roll is actually needed. If roll_request exists, do not resolve outcomes yet and end the narration with 'Roll now.'.\n"
+        "Rules: concise, grounded in provided state; keep outputs safe. Only include roll_request when a player roll is actually needed. If roll_request exists, do not resolve outcomes yet and end the narration with 'Roll now.'.\n"
+        "Entropy: Use the provided entropy_window entries for ALL random outcomes. Each dice_expressions item consumes exactly one entropy entry in order. Use the d20 array from that entry and map to the die size: result = 1 + ((d20 - 1) % die_size). Use the first needed d20 values in order for multi-die rolls.\n"
+        "State changes: Apply outcomes in state_patch and keep it consistent with narration.\n"
+        "No homebrew classes or content; use SRD-only material.\n"
         "Choice contract: Return 4-5 DISTINCT options. Avoid placeholders like 'continue' or 'do nothing'. Label options with varied intent_tag when possible.\n"
         "End narration with a direct invitation: What do you do? (unless a roll_request is present; then end with 'Roll now.').\n"
         "When possible, include: one safe/low-risk option, one risky/high-stakes option, one clever/indirect option."
@@ -366,6 +394,7 @@ async def generate_dm_narration(
         "prior_state": before_state,
         "player_intent": player_intent,
         "diff": diff,
+        "entropy_window": entropy_window or [],
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -379,7 +408,15 @@ async def generate_dm_narration(
             parsed = _parse_dm_json(raw)
             if not parsed:
                 raise ValueError("LLM did not return JSON")
-            dm = _sanitize_dm_payload(parsed, state, player_intent, diff, include_discovery, before_state)
+            dm = _sanitize_dm_payload(
+                parsed,
+                state,
+                player_intent,
+                diff,
+                include_discovery,
+                before_state,
+                len(entropy_window or []),
+            )
             return dm, last_usage
         except Exception as exc:  # noqa: BLE001
             attempts.append(str(exc))
@@ -405,6 +442,7 @@ async def generate_opening_narration(
     character: Optional[Dict],
     hook_label: Optional[str],
     include_discovery: bool = False,
+    entropy_window: Optional[List[Dict]] = None,
 ) -> Tuple[DMNarration, Optional[Dict[str, int]]]:
     prompt = (
         "You are the deterministic DM. This is the OPENING scene for a new solo D&D session.\n"
@@ -416,9 +454,14 @@ async def generate_opening_narration(
         "  choices: array of 4-5 items with fields {id: A/B/C/D/E, text, intent_tag: talk|sneak|fight|magic|investigate|travel|other, risk: low|medium|high},\n"
         "  discovery_added: optional {title, text},\n"
         "  consequence_echo: optional string summarizing the consequence in 1 line,\n"
-        "  roll_request: optional {kind: ability_check|saving_throw|attack|damage|initiative, ability?: STR|DEX|CON|INT|WIS|CHA, skill?: string, dc?: number, advantage?: advantage|disadvantage|normal, reason?: string}\n"
+        "  roll_request: optional {kind: ability_check|saving_throw|attack|damage|initiative, ability?: STR|DEX|CON|INT|WIS|CHA, skill?: string, dc?: number, advantage?: advantage|disadvantage|normal, reason?: string},\n"
+        "  state_patch: object (only fields from SessionState),\n"
+        "  dice_expressions: array of dice strings (each consumes the next entropy entry)\n"
         "}.\n"
         "Rules: concise, grounded in provided state; keep outputs safe.\n"
+        "Entropy: Use the provided entropy_window entries for ALL random outcomes. Each dice_expressions item consumes exactly one entropy entry in order. Use the d20 array from that entry and map to the die size: result = 1 + ((d20 - 1) % die_size). Use the first needed d20 values in order for multi-die rolls.\n"
+        "State changes: Apply outcomes in state_patch and keep it consistent with narration.\n"
+        "No homebrew classes or content; use SRD-only material.\n"
         "Opening contract: narration MUST explicitly state the scene, the immediate problem, why the character is here, "
         "and an explicit question ending with 'What do you do?' (unless a roll_request is present; then end with 'Roll now.').\n"
         "Choice contract: return 4-5 DISTINCT options with varied intent_tag when possible."
@@ -434,6 +477,7 @@ async def generate_opening_narration(
         "diff": diff,
         "character": character,
         "hook": hook_label,
+        "entropy_window": entropy_window or [],
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -447,7 +491,15 @@ async def generate_opening_narration(
             parsed = _parse_dm_json(raw)
             if not parsed:
                 raise ValueError("LLM did not return JSON")
-            dm = _sanitize_dm_payload(parsed, state, player_intent, diff, include_discovery, before_state)
+            dm = _sanitize_dm_payload(
+                parsed,
+                state,
+                player_intent,
+                diff,
+                include_discovery,
+                before_state,
+                len(entropy_window or []),
+            )
             narration = _enforce_opening_contract(dm.narration, state, character, hook_label)
             dm = dm.model_copy(update={"narration": narration})
             return dm, last_usage

@@ -32,6 +32,20 @@ const equipmentPacks = [
 
 const skillOptions = ['athletics', 'perception', 'survival', 'stealth', 'investigation', 'persuasion'];
 const hookOptions = ['Classic dungeon', 'Urban mystery', 'Wilderness survival', 'Political intrigue', 'Horror'];
+const classOptions = [
+  'Barbarian',
+  'Bard',
+  'Cleric',
+  'Druid',
+  'Fighter',
+  'Monk',
+  'Paladin',
+  'Ranger',
+  'Rogue',
+  'Sorcerer',
+  'Warlock',
+  'Wizard',
+];
 
 const abilityCost = (score: number) => {
   if (score <= 8) return 0;
@@ -43,12 +57,6 @@ const abilityCost = (score: number) => {
   if (score === 14) return 7;
   if (score === 15) return 9;
   return 10;
-};
-
-const rollStat = () => {
-  const rolls = Array.from({ length: 4 }, () => 1 + Math.floor(Math.random() * 6));
-  const sorted = rolls.sort((a, b) => b - a);
-  return sorted[0] + sorted[1] + sorted[2];
 };
 
 const CharacterWizard: React.FC<CharacterWizardProps> = ({ sessionSlug, onComplete, onBack }) => {
@@ -74,6 +82,7 @@ const CharacterWizard: React.FC<CharacterWizardProps> = ({ sessionSlug, onComple
   const [selectedHook, setSelectedHook] = useState(hookOptions[0]);
   const [spells, setSpells] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [rolling, setRolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const pointBuySpent = useMemo(
@@ -131,13 +140,25 @@ const CharacterWizard: React.FC<CharacterWizardProps> = ({ sessionSlug, onComple
     }
   };
 
-  const applyRoll = () => {
-    const rolled = abilityKeys.reduce((acc, key) => {
-      acc[key] = rollStat();
-      return acc;
-    }, {} as Record<AbilityKey, number>);
-    setAbilities(rolled);
-    setAbilityMethod('roll');
+  const applyRoll = async () => {
+    if (rolling) return;
+    setError(null);
+    setRolling(true);
+    try {
+      const response = await fetch(`/api/sessions/${sessionSlug}/character/roll-abilities`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Could not roll abilities');
+      }
+      setAbilities(data.abilities);
+      setAbilityMethod('roll');
+    } catch (e: any) {
+      setError(e.message || 'Unable to roll abilities');
+    } finally {
+      setRolling(false);
+    }
   };
 
   const adjustAbility = (key: AbilityKey, delta: number) => {
@@ -251,7 +272,11 @@ const CharacterWizard: React.FC<CharacterWizardProps> = ({ sessionSlug, onComple
             <label>Ancestry</label>
             <input value={ancestry} onChange={(e) => setAncestry(e.target.value)} />
             <label>Class</label>
-            <input value={klass} onChange={(e) => setKlass(e.target.value)} />
+            <select value={klass} onChange={(e) => setKlass(e.target.value)}>
+              {classOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
             <label>Background</label>
             <input value={background} onChange={(e) => setBackground(e.target.value)} />
           </div>
@@ -274,8 +299,8 @@ const CharacterWizard: React.FC<CharacterWizardProps> = ({ sessionSlug, onComple
               <button className={abilityMethod === 'standard' ? 'pill active' : 'pill'} onClick={() => setMethod('standard')}>
                 Standard array
               </button>
-              <button className={abilityMethod === 'roll' ? 'pill active' : 'pill'} onClick={applyRoll}>
-                Roll 4d6 drop lowest
+              <button className={abilityMethod === 'roll' ? 'pill active' : 'pill'} onClick={applyRoll} disabled={rolling}>
+                {rolling ? 'Rolling...' : 'Roll 4d6 drop lowest'}
               </button>
               <button className={abilityMethod === 'point-buy' ? 'pill active' : 'pill'} onClick={() => setMethod('point-buy')}>
                 Point buy
@@ -349,7 +374,7 @@ const CharacterWizard: React.FC<CharacterWizardProps> = ({ sessionSlug, onComple
         <div className="panel review">
           <div>
             <h3>{name || 'Unnamed hero'}</h3>
-            <p>{ancestry} {klass} · {background}</p>
+            <p>{ancestry} {klass} - {background}</p>
             <p>Level {level} / AC {derivedAc} / HP {derivedHp} / {selectedPack.gp} gp</p>
           </div>
           <div className="review-grid">
@@ -448,7 +473,7 @@ const wizardCSS = `
   gap: 16px;
 }
 label { font-weight: 600; display: block; margin: 8px 0 4px; }
-input, textarea {
+input, textarea, select {
   width: 100%;
   border: 1px solid #c7b090;
   border-radius: 10px;

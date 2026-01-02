@@ -786,6 +786,15 @@ class SQLiteTurnStore(TurnStore):
         if turn_number is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Turn number required for record")
         now = _now_iso()
+        state_store = SQLiteStateStore(self.db)
+        state = state_store.load_state(settings, slug)
+        pending_rolls, updated_state = storage._extract_pending_rolls(state, turn_number)
+        if pending_rolls:
+            existing_rolls = record.get("rolls")
+            if not isinstance(existing_rolls, list):
+                existing_rolls = []
+            record["rolls"] = existing_rolls + pending_rolls
+            state_store.save_state(settings, slug, updated_state)
         with self.db.conn:
             self.db.conn.execute(
                 """
@@ -905,6 +914,9 @@ class SQLiteTurnStore(TurnStore):
             roll_payload["breakdown"] = breakdown
             roll_payload["text"] = text
 
+            state["log_index"] = next_index
+            target_turn = (state.get("turn") or 0) + 1
+            state = storage._queue_pending_roll(state, target_turn, roll_payload)
             _persist_state(self.db, session_id, state, update_timestamp=True)
             entry_id = _next_entry_id(self.db, session_id, "transcript")
             self.db.conn.execute(
@@ -914,24 +926,6 @@ class SQLiteTurnStore(TurnStore):
                 """,
                 (session_id, entry_id, text.rstrip(), _now_iso()),
             )
-            turn_row = self.db.conn.execute(
-                "SELECT id, turn_record_json FROM turns WHERE session_id = ? AND turn_number = ?",
-                (session_id, state.get("turn")),
-            ).fetchone()
-            if turn_row:
-                try:
-                    record = json.loads(turn_row["turn_record_json"])
-                except Exception:
-                    record = {}
-                rolls = record.get("rolls")
-                if not isinstance(rolls, list):
-                    rolls = []
-                rolls.append(roll_payload)
-                record["rolls"] = rolls
-                self.db.conn.execute(
-                    "UPDATE turns SET turn_record_json = ?, created_at = ? WHERE id = ?",
-                    (_json_dumps(record), _now_iso(), turn_row["id"]),
-                )
 
         return RollResult(d20=used_rolls, total=total, breakdown=breakdown, text=text)
 

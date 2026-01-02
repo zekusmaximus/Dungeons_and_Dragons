@@ -1,10 +1,9 @@
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
 from http import HTTPStatus
 import json
 import os
 import re
-import random
 from pathlib import Path
 
 import uuid
@@ -157,6 +156,23 @@ HOOK_OPTIONS = [
     "Political intrigue",
     "Horror",
 ]
+
+_SRD_CLASSES = {
+    "barbarian",
+    "bard",
+    "cleric",
+    "druid",
+    "fighter",
+    "monk",
+    "paladin",
+    "ranger",
+    "rogue",
+    "sorcerer",
+    "warlock",
+    "wizard",
+}
+
+_ENTROPY_WINDOW_SIZE = 5
 
 _SKILL_TO_ABILITY = {
     "athletics": "str",
@@ -353,6 +369,61 @@ def _normalize_hook_label(hook: Optional[str]) -> Optional[str]:
         if cleaned.lower() == option.lower():
             return option
     return cleaned
+
+
+def _build_entropy_window(
+    backend: StorageBackend,
+    settings: Settings,
+    log_index: int,
+    window_size: int = _ENTROPY_WINDOW_SIZE,
+) -> List[Dict[str, Any]]:
+    if window_size <= 0:
+        return []
+    target = log_index + window_size
+    backend.entropy.ensure_available(settings, target)
+    window: List[Dict[str, Any]] = []
+    for idx in range(log_index + 1, log_index + window_size + 1):
+        entry = backend.entropy.load_entry(settings, idx)
+        window.append(
+            {
+                "index": idx,
+                "d20": entry.get("d20", []),
+                "d100": entry.get("d100", []),
+            }
+        )
+    return window
+
+
+def _map_d20_to_die(value: int, size: int) -> int:
+    return 1 + ((value - 1) % size)
+
+
+def _roll_abilities_from_entropy(
+    backend: StorageBackend,
+    settings: Settings,
+    slug: str,
+) -> Tuple[Dict[str, int], List[int]]:
+    state = backend.state.load_state(settings, slug)
+    log_index = int(state.get("log_index", 0))
+    ability_keys = ["str", "dex", "con", "int", "wis", "cha"]
+    rolls: Dict[str, int] = {}
+    indices: List[int] = []
+
+    for key in ability_keys:
+        log_index += 1
+        backend.entropy.ensure_available(settings, log_index)
+        entry = backend.entropy.load_entry(settings, log_index)
+        d20_values = entry.get("d20") or []
+        if len(d20_values) < 4:
+            raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="Entropy entry missing d20 rolls")
+        d6_rolls = [_map_d20_to_die(value, 6) for value in d20_values[:4]]
+        d6_rolls.sort(reverse=True)
+        rolls[key] = sum(d6_rolls[:3])
+        indices.append(log_index)
+
+    state["log_index"] = log_index
+    backend.state.save_state(settings, slug, state)
+    return rolls, indices
 
 
 @app.post("/sessions", status_code=201)
@@ -789,6 +860,9 @@ def create_character_for_session(
     settings: Settings = Depends(get_settings_dep),
 ) -> CharacterCreationResponse:
     backend = _get_backend(settings)
+    class_name = request.class_name.strip().lower()
+    if class_name not in _SRD_CLASSES:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Class must be SRD-only.")
     state = backend.state.load_state(settings, slug)
     equipment = request.equipment or []
     ability_scores = request.abilities.model_dump(by_alias=True)
@@ -857,6 +931,16 @@ def create_character_for_session(
     return CharacterCreationResponse(character=saved_character, state=updated_state)
 
 
+@app.post("/sessions/{slug}/character/roll-abilities")
+def roll_character_abilities(
+    slug: str,
+    settings: Settings = Depends(get_settings_dep),
+) -> Dict[str, Any]:
+    backend = _get_backend(settings)
+    rolls, indices = _roll_abilities_from_entropy(backend, settings, slug)
+    return {"abilities": rolls, "entropy_indices": indices}
+
+
 @app.get("/sessions/{slug}/player")
 def get_player_bundle(slug: str, settings: Settings = Depends(get_settings_dep)) -> PlayerBundleResponse:
     backend = _get_backend(settings)
@@ -909,6 +993,7 @@ async def player_opening_scene(
         claimed_here = True
     try:
         state = backend.state.load_state(settings, slug)
+        entropy_window = _build_entropy_window(backend, settings, state.get("log_index", 0))
         try:
             character = backend.character.load_character(settings, slug)
         except HTTPException:
@@ -919,25 +1004,72 @@ async def player_opening_scene(
             if isinstance(existing_hook, dict):
                 hook_label = existing_hook.get("label")
         if not hook_label:
-            hook_label = random.choice(HOOK_OPTIONS)
+            hook_label = HOOK_OPTIONS[0]
         state_patch = {}
         if hook_label:
             existing_label = existing_hook.get("label") if isinstance(existing_hook, dict) else None
             if existing_label != hook_label:
                 state_patch["adventure_hook"] = {"label": hook_label}
 
+        include_discovery = True
+        dm_output, usage = await generate_opening_narration(
+            settings,
+            slug,
+            state,
+            state,
+            "Opening scene",
+            [],
+            character,
+            hook_label,
+            include_discovery=include_discovery,
+            entropy_window=entropy_window,
+        )
+        combined_patch = dict(state_patch)
+        if dm_output.state_patch:
+            combined_patch.update(dm_output.state_patch)
+
         preview_id, _, _ = backend.turn.create_preview(
             settings,
             slug,
             PreviewRequest(
                 response="Opening scene",
-                state_patch=state_patch,
-                transcript_entry=f"Adventure hook: {hook_label}" if hook_label else "Adventure begins.",
+                state_patch=combined_patch,
+                transcript_entry=f"Player: Opening scene\nDM: {dm_output.narration}",
                 lock_owner=owner,
+                dice_expressions=dm_output.dice_expressions,
             ),
         )
         commit_request = CommitRequest(preview_id=preview_id, lock_owner=owner)
-        result = await _commit_and_narrate_opening(settings, slug, commit_request, hook_label, character)
+        state_before = state
+        state_after, log_indices = backend.turn.commit_preview(settings, slug, commit_request.preview_id, commit_request.lock_owner)
+        session_state = SessionState(**state_after)
+        diff = backend.turn.summarize_state_diff(state_before, state_after)
+        if dm_output.discovery_added:
+            discovery_log = get_discovery_log(slug, settings.repo_root)
+            discovery_log.create_discovery(
+                name=dm_output.discovery_added.title,
+                discovery_type="rumor",
+                description=dm_output.discovery_added.text,
+                location=session_state.location,
+                importance=1,
+            )
+            backend.docs.record_last_discovery_turn(settings, slug, session_state.turn)
+        consequence_echo = dm_output.consequence_echo or "A new consequence unfolds."
+        record_payload = TurnRecord(
+            turn=session_state.turn,
+            player_intent="Opening scene",
+            diff=diff,
+            consequence_echo=consequence_echo,
+            dm=dm_output,
+            created_at=datetime.now(timezone.utc),
+        ).model_dump(mode="json")
+        backend.turn.persist_turn_record(settings, slug, record_payload)
+        result = CommitAndNarrateResponse(
+            commit=CommitResponse(state=session_state, log_indices=log_indices),
+            dm=dm_output,
+            turn_record=TurnRecord(**record_payload),
+            usage=usage,
+        )
     finally:
         if claimed_here:
             backend.session.release_lock(settings, slug)
@@ -986,6 +1118,8 @@ async def player_turn(
     settings: Settings = Depends(get_settings_dep),
 ) -> PlayerTurnResponse:
     backend = _get_backend(settings)
+    if request.state_patch:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="state_patch is DM-controlled.")
     owner = "player-ui"
     claimed_here = False
     lock_info = backend.session.get_lock_info(settings, slug)
@@ -995,18 +1129,64 @@ async def player_turn(
         backend.session.claim_lock(settings, slug, owner, ttl=300)
         claimed_here = True
     try:
+        state_before = backend.state.load_state(settings, slug)
+        last_discovery_turn = backend.docs.get_last_discovery_turn(settings, slug)
+        include_discovery = last_discovery_turn is None or (state_before.get("turn", 0) + 1) - last_discovery_turn > 2
+        entropy_window = _build_entropy_window(backend, settings, state_before.get("log_index", 0))
+
+        dm_output, usage = await generate_dm_narration(
+            settings,
+            slug,
+            state_before,
+            state_before,
+            request.action,
+            [],
+            include_discovery=include_discovery,
+            entropy_window=entropy_window,
+        )
+
         preview_id, _, _ = backend.turn.create_preview(
             settings,
             slug,
             PreviewRequest(
                 response=request.action,
-                state_patch=request.state_patch,
-                transcript_entry=request.action,
+                state_patch=dm_output.state_patch,
+                transcript_entry=f"Player: {request.action}\nDM: {dm_output.narration}",
                 lock_owner=owner,
+                dice_expressions=dm_output.dice_expressions,
             ),
         )
         commit_request = CommitRequest(preview_id=preview_id, lock_owner=owner)
-        result = await _commit_and_narrate_internal(settings, slug, commit_request)
+        state_after, log_indices = backend.turn.commit_preview(settings, slug, commit_request.preview_id, commit_request.lock_owner)
+        session_state = SessionState(**state_after)
+        diff = backend.turn.summarize_state_diff(state_before, state_after)
+
+        if dm_output.discovery_added:
+            discovery_log = get_discovery_log(slug, settings.repo_root)
+            discovery_log.create_discovery(
+                name=dm_output.discovery_added.title,
+                discovery_type="rumor",
+                description=dm_output.discovery_added.text,
+                location=session_state.location,
+                importance=1,
+            )
+            backend.docs.record_last_discovery_turn(settings, slug, session_state.turn)
+        consequence_echo = dm_output.consequence_echo or "A new consequence unfolds."
+        record_payload = TurnRecord(
+            turn=session_state.turn,
+            player_intent=request.action,
+            diff=diff,
+            consequence_echo=consequence_echo,
+            dm=dm_output,
+            created_at=datetime.now(timezone.utc),
+        ).model_dump(mode="json")
+        backend.turn.persist_turn_record(settings, slug, record_payload)
+        result = CommitAndNarrateResponse(
+            commit=CommitResponse(state=session_state, log_indices=log_indices),
+            dm=dm_output,
+            turn_record=TurnRecord(**record_payload),
+            usage=usage,
+        )
     finally:
         if claimed_here:
             backend.session.release_lock(settings, slug)

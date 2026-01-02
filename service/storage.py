@@ -756,25 +756,36 @@ def _append_transcript_entry(session_path: Path, text: str) -> None:
         handle.write(text.rstrip() + "\n")
 
 
-def _append_roll_to_turn_record(settings: Settings, slug: str, roll_payload: Dict) -> None:
-    session_path = _ensure_session(settings, slug)
-    state = load_state(settings, slug)
-    turn_number = state.get("turn")
-    if turn_number is None:
-        return
-    record_path = session_path / "turns" / f"{turn_number}.json"
-    if not record_path.exists():
-        return
-    try:
-        record = json.loads(record_path.read_text(encoding="utf-8"))
-    except Exception:
-        return
-    rolls = record.get("rolls")
-    if not isinstance(rolls, list):
-        rolls = []
-    rolls.append(roll_payload)
-    record["rolls"] = rolls
-    record_path.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
+def _queue_pending_roll(state: Dict, turn_number: int, roll_payload: Dict) -> Dict:
+    flags = state.get("flags")
+    if not isinstance(flags, dict):
+        flags = {}
+    pending = flags.get("pending_rolls")
+    if not isinstance(pending, list):
+        pending = []
+    pending.append({"turn": turn_number, "roll": roll_payload})
+    flags["pending_rolls"] = pending
+    state["flags"] = flags
+    return state
+
+
+def _extract_pending_rolls(state: Dict, turn_number: int) -> Tuple[List[Dict], Dict]:
+    flags = state.get("flags")
+    if not isinstance(flags, dict):
+        return [], state
+    pending = flags.get("pending_rolls")
+    if not isinstance(pending, list):
+        return [], state
+    matched: List[Dict] = []
+    remaining: List[Dict] = []
+    for entry in pending:
+        if isinstance(entry, dict) and entry.get("turn") == turn_number and isinstance(entry.get("roll"), dict):
+            matched.append(entry["roll"])
+        else:
+            remaining.append(entry)
+    flags["pending_rolls"] = remaining
+    state["flags"] = flags
+    return matched, state
 
 
 def perform_roll(settings: Settings, slug: str, roll_request: RollRequest) -> RollResult:
@@ -818,9 +829,6 @@ def perform_roll(settings: Settings, slug: str, roll_request: RollRequest) -> Ro
 
     total = base_roll + modifier
 
-    state["log_index"] = next_index
-    save_state(settings, slug, state)
-
     breakdown_parts = [str(base_roll)]
     if ability:
         breakdown_parts.append(f"{ability_mod:+d} ({ability})")
@@ -843,7 +851,10 @@ def perform_roll(settings: Settings, slug: str, roll_request: RollRequest) -> Ro
         "text": text,
     }
     _append_transcript_entry(_ensure_session(settings, slug), text)
-    _append_roll_to_turn_record(settings, slug, roll_payload)
+    state["log_index"] = next_index
+    target_turn = (state.get("turn") or 0) + 1
+    state = _queue_pending_roll(state, target_turn, roll_payload)
+    save_state(settings, slug, state)
 
     return RollResult(d20=used_rolls, total=total, breakdown=breakdown, text=text)
 def _apply_state_patch(state: Dict, patch: Dict) -> Dict:
@@ -893,6 +904,14 @@ def persist_turn_record(
     turn_number = record.get("turn")
     if turn_number is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Turn number required for record")
+    state = load_state(settings, slug)
+    pending_rolls, updated_state = _extract_pending_rolls(state, turn_number)
+    if pending_rolls:
+        existing_rolls = record.get("rolls")
+        if not isinstance(existing_rolls, list):
+            existing_rolls = []
+        record["rolls"] = existing_rolls + pending_rolls
+        save_state(settings, slug, updated_state)
     record_path = turns_dir / f"{turn_number}.json"
     with record_path.open("w", encoding="utf-8") as handle:
         json.dump(record, handle, indent=2, default=str)
