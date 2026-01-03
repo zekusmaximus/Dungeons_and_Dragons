@@ -2,114 +2,124 @@
 
 ## Introduction
 
-This project delivers a deterministic, file-backed solo D&D experience. A FastAPI backend reads and writes the same session files a human DM would touch, and a React/Vite UI consumes the API via a `/api` proxy. Dice entropy is pre-generated, gameplay contracts live in `PROTOCOL.md`, and every turn is auditable in the repo.
+This project delivers a deterministic solo D&D experience where the AI is the DM. A FastAPI backend enforces deterministic state updates and entropy-based rolls, while a React/Vite UI provides the player table, character sheet, and journaling.
 
 Key pillars:
 - Deterministic dice mechanics using `dice/entropy.ndjson`
-- File-based campaign storage for easy backups and versioning
-- Web UI for browsing sessions and driving turns
-- Modular backend that can be extended with additional tools
+- AI DM produces explicit `state_patch` and `dice_expressions` for each turn
+- File-based campaign storage for easy backups and auditability
+- SRD-only classes, spells, monsters, and rules (no homebrew)
 
-## Getting Started
+## Install and Run
 
-### Prerequisites
-- Python 3.8+ for the backend service
-- Node.js and npm for the frontend UI
-- Git for version control (optional but recommended)
+### Desktop App (Windows EXE)
+Build a Windows installer with the bundled backend and UI.
 
-### Installation
-1. Clone or download the project repository.
-2. Navigate to the project root directory.
-3. Install backend dependencies (virtual environment recommended):
-   ```
-   pip install -r service/requirements.txt
-   ```
-4. Install frontend dependencies:
-   ```
-   cd ui
-   npm install
-   cd ..
-   ```
+Prerequisites (build machine):
+- Node.js 18+
+- Python 3.10+ on PATH (for packaging only)
 
-### Running the Application
-1. Start the backend service from the project root directory (port `8000`):
-   ```
-   uvicorn service.app:app --reload --port 8000
-   ```
-2. In a separate terminal, start the frontend UI (proxies `/api` to the backend):
-   ```
-   cd ui
-   npm run dev
-   ```
-3. Open your web browser and navigate to `http://localhost:5173` (or the port shown by Vite).
+Build steps:
+1) Build the UI:
+```
+npm --prefix ui install
+npm --prefix ui run build
+```
+2) Install desktop build dependencies:
+```
+npm --prefix desktop install
+```
+3) Build the Windows EXE (NSIS):
+```
+npm --prefix desktop run dist
+```
+Output: `desktop/dist/`
 
-### Creating Your First Session
-1. Launch the UI to see the Lobby component.
-2. Select the shipped **example-rogue** session to begin play. The "New Adventure" button now POSTs `/api/sessions` to clone the template into a fresh slug and refreshes the session list automatically.
-3. Manual alternative: copy `sessions/example-rogue` to a new slug, duplicate `data/characters/example-rogue.json` to `data/characters/<slug>.json`, reset `state.json` to turn `0`, and clear `transcript.md`/`changelog.md` except for initialization text.
-4. Configure your LLM key from the Narrative Dashboard → Settings → LLM Configuration, or set the `DM_SERVICE_LLM_API_KEY` environment variable before starting the backend. The POST `/api/llm/config` endpoint persists overrides to `.dm_llm_config.json` and never echoes your key.
+First run:
+- The app asks for a data folder. This is where all sessions, character data, and entropy live.
+- The backend seeds the folder with required assets on first run.
 
-## Gameplay Mechanics
+### Developer Mode (UI + API)
+1) Install backend deps:
+```
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r service/requirements.txt
+```
+2) Build the UI once:
+```
+npm --prefix ui install
+npm --prefix ui run build
+```
+3) Start the combined server:
+```
+uvicorn service.app:app --host 0.0.0.0 --port 8000
+```
+4) Open `http://localhost:8000`
 
-### Character Data
-- Characters live in `data/characters/<slug>.json`.
-- Session state follows `service/models.py::SessionState` and is stored in `sessions/<slug>/state.json`.
+Optional: run the Vite dev server separately:
+```
+VITE_API_BASE_URL=http://localhost:8000 npm run dev --prefix ui
+```
 
-### Dice
-- Deterministic dice rolls come from `dice/entropy.ndjson`.
-- Use `dice/README.md` and `dice/verify_dice.py` to inspect or extend the pool.
+### Data Root (non-repo storage)
+You can point the backend at any folder:
+- `DM_SERVICE_DATA_ROOT`: data folder to store sessions and assets.
+- `DM_SERVICE_SEED_ROOT`: source folder to seed assets from (defaults to the repo).
 
-### Exploration & Narrative
-- The UI surfaces the current scene from `turn.md` and state information from `state.json`.
-- `/sessions/{slug}/llm/narrate` injects session and character context into the LLM call.
+Example:
+```
+set DM_SERVICE_DATA_ROOT=D:\SoloDM\Data
+uvicorn service.app:app --port 8000
+```
 
-### Turn Preview & Commit
-- `/sessions/{slug}/turn/preview` validates the current state, computes a diff, and reserves deterministic entropy indices without advancing `log_index`.
-- `/sessions/{slug}/turn/commit` re-checks the preview base hash/turn, consumes the reserved indices, appends transcript/changelog entries, and increments `turn` atomically. Stale previews return `409 Conflict`.
+## Gameplay Loop
 
-### Downtime & Jobs
-- Jobs endpoints (explore/loot/downtime/etc.) are gated with `501 Not Implemented`; run the CLI tools manually under a session lock if needed.
+### Character Creation
+- Use the Character Wizard to roll abilities from entropy and select an SRD class.
+- A character is saved under `sessions/<slug>/character.json` and `data/characters/<slug>.json`.
+- Starting scene is generated after creation via `/sessions/{slug}/player/opening`.
 
-## UI Components
+### Turns and State Updates
+- The AI DM returns JSON containing:
+  - `state_patch`: updates to session state (HP, inventory, conditions, etc)
+  - `dice_expressions`: rolls to consume from `dice/entropy.ndjson`
+- The backend commits `state_patch` and reserves the entropy indices atomically.
+- State updates applied via `state_patch` are also synced into the session character sheet so the UI reflects HP, inventory, level, spells, and abilities changes.
+- The player only submits intent; the DM controls state updates.
 
-### Lobby
-Lists existing campaigns. The "New Adventure" button clones the template session via POST `/api/sessions` and opens it immediately.
+### Rolls
+- All random outcomes consume entropy.
+- Player roll requests (ability checks, saves, attacks) are logged and attached to the next committed turn.
 
-### Narrative Dashboard
-Shows current scene text, quick actions, transcript/changelog panels, and links to map and character views.
+## Data Model
 
-### Turn Console
-Manages lock claim/release and preview/commit calls to the backend turn endpoints.
+- Session state: `sessions/<slug>/state.json` (validated by `schemas/state.schema.json`)
+- Transcript and changelog: `sessions/<slug>/transcript.md`, `sessions/<slug>/changelog.md`
+- Deterministic entropy: `dice/entropy.ndjson`
+- Characters: `sessions/<slug>/character.json` and `data/characters/<slug>.json`
 
-### LLM Configuration
-Available from the Narrative Dashboard settings modal. Persists base URL/model and key presence to `.dm_llm_config.json` (git-ignored) and never returns the key in responses.
+## Configuration
 
-## Advanced Features
+Key environment variables:
+- `DM_SERVICE_DATA_ROOT`: data folder for sessions and assets
+- `DM_SERVICE_SEED_ROOT`: seed folder for first-run copy
+- `STORAGE_BACKEND`: `file` or `sqlite`
+- `SQLITE_PATH`: sqlite db path (if using sqlite)
+- `DM_API_KEY`: optional API key gate for writes
+- `DM_SERVICE_LLM_API_KEY`: LLM API key
+- `DM_SERVICE_LLM_MODEL`: default model
+- `DM_SERVICE_LLM_BASE_URL`: provider base URL
 
-### File-Based Storage
-- Sessions live under `sessions/`, characters under `data/characters/`, and supporting data under `worlds/` and `data/`.
-- Version control is encouraged for auditing and backup.
-
-### Snapshots and Journaling
-- Auto-save endpoints write snapshots beneath `sessions/<slug>/saves` and `auto_save.json`.
-- `transcript.md` and `changelog.md` remain the audit trail for turns.
-
-### API and Extensibility
-- FastAPI endpoints are defined in `service/app.py`; extend or gate features there.
-- Docker builds are available via `service/Dockerfile`.
-
-## FAQs
-
-### How do I roll dice?
-Dice rolls are deterministic and pulled from `dice/entropy.ndjson`; the next unused entry is consumed for each roll.
+## FAQ
 
 ### Can I play offline?
-Yes. All data is local; only the LLM endpoint requires internet access.
+Yes. All data is local. Only LLM narration requires network access.
 
 ### How do I back up my campaign?
-Copy the repo or use Git. Key gameplay files live under `sessions/<slug>/` and `data/characters/`.
+Back up the data folder you selected. All sessions and characters live there.
 
-### What if an API call fails?
-Check the FastAPI logs. Verify that the backend is running on port `8000` and the UI proxy is targeting `/api`. Ensure session files exist and follow the expected schema.
+### What if the UI loads but the DM is silent?
+Check that the LLM key is configured via `/api/llm/config` or `DM_SERVICE_LLM_API_KEY`.
 
-For more detail, see `README.md`, `service/README.md`, `ENGINE.md`, and `PROTOCOL.md`.
+For more detail, see `README.md`, `ENGINE.md`, and `PROTOCOL.md`.

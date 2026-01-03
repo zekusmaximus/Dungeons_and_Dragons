@@ -1,0 +1,146 @@
+{
+  "name": "dm-desktop",
+  "version": "0.1.0",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:ui": "npm --prefix ../ui run build",
+    "prepare:python": "powershell -ExecutionPolicy Bypass -File scripts/prepare_windows_python.ps1",
+    "build:app": "electron-builder --win --x64",
+    "dist": "npm run build:ui && npm run prepare:python && npm run build:app"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.dungeons.dragons.solo",
+    "productName": "Solo DM",
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "./python",
+        "to": "python"
+      },
+      {
+        "from": "../service",
+        "to": "backend/service"
+      },
+      {
+        "from": "../ui/dist",
+        "to": "backend/ui/dist"
+      },
+      {
+        "from": "../PROMPTS",
+        "to": "backend/PROMPTS"
+      },
+      {
+        "from": "../schemas",
+        "to": "backend/schemas"
+      },
+      {
+        "from": "../data",
+        "to": "backend/data"
+      },
+      {
+        "from": "../dice",
+        "to": "backend/dice"
+      },
+      {
+        "from": "../sessions",
+        "to": "backend/sessions"
+      },
+      {
+        "from": "../worlds",
+        "to": "backend/worlds"
+      },
+      {
+        "from": "../rules_index",
+        "to": "backend/rules_index"
+      },
+      {
+        "from": "../tables",
+        "to": "backend/tables"
+      },
+      {
+        "from": "../quests",
+        "to": "backend/quests"
+      },
+      {
+        "from": "../exploration",
+        "to": "backend/exploration"
+      },
+      {
+        "from": "../combat",
+        "to": "backend/combat"
+      },
+      {
+        "from": "../downtime",
+        "to": "backend/downtime"
+      },
+      {
+        "from": "../factions",
+        "to": "backend/factions"
+      },
+      {
+        "from": "../locations",
+        "to": "backend/locations"
+      },
+      {
+        "from": "../mysteries",
+        "to": "backend/mysteries"
+      },
+      {
+        "from": "../narrative",
+        "to": "backend/narrative"
+      },
+      {
+        "from": "../npcs",
+        "to": "backend/npcs"
+      },
+      {
+        "from": "../party",
+        "to": "backend/party"
+      },
+      {
+        "from": "../rumors",
+        "to": "backend/rumors"
+      },
+      {
+        "from": "../timeline",
+        "to": "backend/timeline"
+      },
+      {
+        "from": "../character_creation",
+        "to": "backend/character_creation"
+      },
+      {
+        "from": "../ENGINE.md",
+        "to": "backend/ENGINE.md"
+      },
+      {
+        "from": "../PROTOCOL.md",
+        "to": "backend/PROTOCOL.md"
+      },
+      {
+        "from": "../INSTRUCTION_MANUAL.md",
+        "to": "backend/INSTRUCTION_MANUAL.md"
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}

@@ -9,4 +9,4 @@ Key components:
 - **Loot and Downtime (`tools/loot.py`, `tools/downtime.py`)** apply treasure rolls and downtime actions that affect state.
 - **Rules Search (`tools/index_rules.py`, `tools/search_rules.py`)** indexes Markdown rules with TF-IDF for local citations.
 
-See `PROTOCOL.md` for operational guidance and `PROMPTS/dm_contract_v2.md` for DM-facing instructions.
+See `PROTOCOL.md` for operational guidance and `PROMPTS/dm_v3_contract.md` for DM-facing instructions.

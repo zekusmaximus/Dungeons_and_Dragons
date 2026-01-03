@@ -54,6 +54,11 @@ interface SessionState {
   gp?: number;
   conditions?: string[];
   spell_slots?: Record<string, number>;
+  xp?: number;
+  level?: number;
+  abilities?: AbilityScores;
+  inventory?: string[];
+  spells?: string[];
 }
 
 const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose }) => {
@@ -84,6 +89,12 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
     </div>
   );
 
+  const abilities = state?.abilities ?? character.abilities ?? {};
+  const inventory = state?.inventory ?? character.inventory ?? [];
+  const spells = state?.spells ?? character.spells ?? [];
+  const experience = state?.xp ?? character.experience ?? 0;
+  const level = state?.level ?? character.level;
+
   // Calculate ability modifiers
   const getModifier = (score: number) => Math.floor((score - 10) / 2);
 
@@ -94,7 +105,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
       <div className="sheet-header">
         <h2>{character.name}</h2>
         <div className="basic-info">
-          <span>{character.race} {character.class} Level {character.level}</span>
+          <span>{character.race} {character.class} Level {level}</span>
           <span>{character.background} - {character.alignment}</span>
         </div>
         <button onClick={onClose} className="close-button">X</button>
@@ -107,7 +118,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             <div className="stat-box">
               <div className="stat-label">HP</div>
               <div className="stat-value">
-                {state?.hp ?? character?.max_hp ?? '?'}{`/`}{state?.max_hp ?? character?.max_hp ?? '?'}
+                {state?.hp ?? character?.hp ?? character?.max_hp ?? '?'}{`/`}{state?.max_hp ?? character?.max_hp ?? '?'}
               </div>
             </div>
 
@@ -119,8 +130,8 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             <div className="stat-box">
               <div className="stat-label">Initiative</div>
               <div className="stat-value">
-                {getModifier(character.abilities?.dex ?? 10) >= 0 ? '+' : ''}
-                {getModifier(character.abilities?.dex ?? 10)}
+                {getModifier(abilities.dex ?? 10) >= 0 ? '+' : ''}
+                {getModifier(abilities.dex ?? 10)}
               </div>
             </div>
 
@@ -137,9 +148,9 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             <div className="xp-bar">
               <div
                 className="xp-progress"
-                style={{ width: `${Math.min(100, ((character.experience || 0) / 1000) * 100)}%` }}
+                style={{ width: `${Math.min(100, (experience / 1000) * 100)}%` }}
               ></div>
-              <span className="xp-text">XP: {character.experience || 0}/1000</span>
+              <span className="xp-text">XP: {experience}/1000</span>
             </div>
           </div>
         </div>
@@ -148,7 +159,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
         <div className="ability-scores">
           <h3>Ability Scores</h3>
           <div className="abilities-grid">
-            {Object.entries(character.abilities || {}).map(([ability, score]) => (
+            {Object.entries(abilities).map(([ability, score]) => (
               <div key={ability} className="ability-box">
                 <div className="ability-name">{ability.toUpperCase()}</div>
                 <div className="ability-score">{score}</div>
@@ -193,9 +204,9 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             <div className="inventory-section">
               <h3>Inventory</h3>
               <div className="inventory-items">
-                {character.inventory?.length ? (
+                {inventory.length ? (
                   <ul>
-                    {character.inventory.map((item, index) => (
+                    {inventory.map((item, index) => (
                       <li key={index}>{item}</li>
                     ))}
                   </ul>
@@ -252,12 +263,12 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
             </div>
 
             {/* Spells (if applicable) */}
-            {Boolean(character.spells?.length) && (
+            {Boolean(spells.length) && (
               <div className="spells-section">
                 <h3>Spells</h3>
                 <div className="spells-list">
                   <ul>
-                    {character.spells?.map((spell, index) => (
+                    {spells.map((spell, index) => (
                       <li key={index}>{spell}</li>
                     ))}
                   </ul>

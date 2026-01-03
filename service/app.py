@@ -747,6 +747,11 @@ async def _commit_and_narrate_internal(
     player_intent = preview_data.get("response", "")
     include_discovery = last_discovery_turn is None or session_state.turn - last_discovery_turn > 2
 
+    try:
+        character = backend.character.load_character(settings, slug)
+    except Exception:
+        character = {}
+
     dm_output, usage = await generate_dm_narration(
         settings,
         slug,
@@ -754,10 +759,11 @@ async def _commit_and_narrate_internal(
         state_before,
         player_intent,
         diff,
+        character=character,
         include_discovery=include_discovery,
     )
     if dm_output.discovery_added:
-        discovery_log = get_discovery_log(slug, settings.repo_root)
+        discovery_log = get_discovery_log(slug, settings.storage_root)
         discovery_log.create_discovery(
             name=dm_output.discovery_added.title,
             discovery_type="rumor",
@@ -815,7 +821,7 @@ async def _commit_and_narrate_opening(
         include_discovery=include_discovery,
     )
     if dm_output.discovery_added:
-        discovery_log = get_discovery_log(slug, settings.repo_root)
+        discovery_log = get_discovery_log(slug, settings.storage_root)
         discovery_log.create_discovery(
             name=dm_output.discovery_added.title,
             discovery_type="rumor",
@@ -951,7 +957,7 @@ def get_player_bundle(slug: str, settings: Settings = Depends(get_settings_dep))
         character = {}
     recaps_raw = backend.turn.load_turn_records(settings, slug, limit=3)
     recaps = [TurnRecord(**r) for r in recaps_raw]
-    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discovery_log = get_discovery_log(slug, settings.storage_root)
     discoveries = [d.to_dict() for d in discovery_log.get_recent_discoveries(5)]
     quests = backend.state.load_quests(settings, slug)
     raw_suggestions: List[str] = []
@@ -1045,7 +1051,7 @@ async def player_opening_scene(
         session_state = SessionState(**state_after)
         diff = backend.turn.summarize_state_diff(state_before, state_after)
         if dm_output.discovery_added:
-            discovery_log = get_discovery_log(slug, settings.repo_root)
+            discovery_log = get_discovery_log(slug, settings.storage_root)
             discovery_log.create_discovery(
                 name=dm_output.discovery_added.title,
                 discovery_type="rumor",
@@ -1130,6 +1136,10 @@ async def player_turn(
         claimed_here = True
     try:
         state_before = backend.state.load_state(settings, slug)
+        try:
+            character = backend.character.load_character(settings, slug)
+        except Exception:
+            character = {}
         last_discovery_turn = backend.docs.get_last_discovery_turn(settings, slug)
         include_discovery = last_discovery_turn is None or (state_before.get("turn", 0) + 1) - last_discovery_turn > 2
         entropy_window = _build_entropy_window(backend, settings, state_before.get("log_index", 0))
@@ -1141,6 +1151,7 @@ async def player_turn(
             state_before,
             request.action,
             [],
+            character=character,
             include_discovery=include_discovery,
             entropy_window=entropy_window,
         )
@@ -1162,7 +1173,7 @@ async def player_turn(
         diff = backend.turn.summarize_state_diff(state_before, state_after)
 
         if dm_output.discovery_added:
-            discovery_log = get_discovery_log(slug, settings.repo_root)
+            discovery_log = get_discovery_log(slug, settings.storage_root)
             discovery_log.create_discovery(
                 name=dm_output.discovery_added.title,
                 discovery_type="rumor",
@@ -1532,18 +1543,18 @@ class RelationshipUpdateRequest(BaseModel):
 
 
 @app.get("/sessions/{slug}/npcs/relationships", tags=["NPCs"], summary="Get all NPC relationships")
-def get_npc_relationships(slug: str):
+def get_npc_relationships(slug: str, settings: Settings = Depends(get_settings_dep)):
     """Get all NPC relationships for a session"""
-    relationship_service = get_npc_relationship_service(slug)
+    relationship_service = get_npc_relationship_service(slug, base_root=settings.storage_root)
     relationships = relationship_service.get_all_relationships()
     
     return [NPCRelationshipResponse(**rel.to_dict()) for rel in relationships]
 
 
 @app.get("/sessions/{slug}/npcs/{npc_id}/relationship", tags=["NPCs"], summary="Get relationship with specific NPC")
-def get_npc_relationship(slug: str, npc_id: str):
+def get_npc_relationship(slug: str, npc_id: str, settings: Settings = Depends(get_settings_dep)):
     """Get relationship details for a specific NPC"""
-    relationship_service = get_npc_relationship_service(slug)
+    relationship_service = get_npc_relationship_service(slug, base_root=settings.storage_root)
     relationship = relationship_service.get_relationship(npc_id)
     
     if not relationship:
@@ -1553,9 +1564,14 @@ def get_npc_relationship(slug: str, npc_id: str):
 
 
 @app.post("/sessions/{slug}/npcs/{npc_id}/relationship", tags=["NPCs"], summary="Update relationship with NPC")
-def update_npc_relationship(slug: str, npc_id: str, request: RelationshipUpdateRequest):
+def update_npc_relationship(
+    slug: str,
+    npc_id: str,
+    request: RelationshipUpdateRequest,
+    settings: Settings = Depends(get_settings_dep),
+):
     """Update relationship with an NPC based on interaction"""
-    relationship_service = get_npc_relationship_service(slug)
+    relationship_service = get_npc_relationship_service(slug, base_root=settings.storage_root)
     
     # Get NPC name from context or use ID
     npc_name = request.context.get('npc_name', npc_id)
@@ -1575,9 +1591,14 @@ def update_npc_relationship(slug: str, npc_id: str, request: RelationshipUpdateR
 
 
 @app.post("/sessions/{slug}/npcs/{npc_id}/dialogue", tags=["NPCs"], summary="Generate NPC dialogue")
-async def generate_npc_dialogue(slug: str, npc_id: str, context: Dict):
+async def generate_npc_dialogue(
+    slug: str,
+    npc_id: str,
+    context: Dict,
+    settings: Settings = Depends(get_settings_dep),
+):
     """Generate dialogue for an NPC based on current relationship"""
-    relationship_service = get_npc_relationship_service(slug)
+    relationship_service = get_npc_relationship_service(slug, base_root=settings.storage_root)
     
     dialogue = await relationship_service.generate_relationship_dialogue(npc_id, context)
     
@@ -1588,9 +1609,9 @@ async def generate_npc_dialogue(slug: str, npc_id: str, context: Dict):
 
 
 @app.get("/sessions/{slug}/npcs/relationship-summary", tags=["NPCs"], summary="Get relationship summary")
-def get_relationship_summary(slug: str):
+def get_relationship_summary(slug: str, settings: Settings = Depends(get_settings_dep)):
     """Get a summary of all NPC relationships"""
-    relationship_service = get_npc_relationship_service(slug)
+    relationship_service = get_npc_relationship_service(slug, base_root=settings.storage_root)
     relationships = relationship_service.get_all_relationships()
     
     summary = {
@@ -1652,9 +1673,9 @@ class MoodAdjustRequest(BaseModel):
 
 
 @app.get("/sessions/{slug}/mood", tags=["Mood"], summary="Get current mood state")
-def get_current_mood(slug: str):
+def get_current_mood(slug: str, settings: Settings = Depends(get_settings_dep)):
     """Get the current mood and tone settings"""
-    mood_system = get_mood_system(slug)
+    mood_system = get_mood_system(slug, base_root=settings.storage_root)
     
     return MoodResponse(
         current_mood=mood_system.get_current_mood().value,
@@ -1664,9 +1685,9 @@ def get_current_mood(slug: str):
 
 
 @app.post("/sessions/{slug}/mood", tags=["Mood"], summary="Set mood state")
-def set_mood_state(slug: str, request: MoodUpdateRequest):
+def set_mood_state(slug: str, request: MoodUpdateRequest, settings: Settings = Depends(get_settings_dep)):
     """Set the current mood and intensity"""
-    mood_system = get_mood_system(slug)
+    mood_system = get_mood_system(slug, base_root=settings.storage_root)
     
     try:
         mood = Mood(request.mood)
@@ -1681,9 +1702,9 @@ def set_mood_state(slug: str, request: MoodUpdateRequest):
 
 
 @app.patch("/sessions/{slug}/mood", tags=["Mood"], summary="Adjust mood state")
-def adjust_mood_state(slug: str, request: MoodAdjustRequest):
+def adjust_mood_state(slug: str, request: MoodAdjustRequest, settings: Settings = Depends(get_settings_dep)):
     """Adjust the current mood"""
-    mood_system = get_mood_system(slug)
+    mood_system = get_mood_system(slug, base_root=settings.storage_root)
     
     try:
         mood_change = Mood(request.mood_change)
@@ -1698,17 +1719,22 @@ def adjust_mood_state(slug: str, request: MoodAdjustRequest):
 
 
 @app.get("/sessions/{slug}/mood/suggestions", tags=["Mood"], summary="Get mood suggestions")
-def get_mood_suggestions(slug: str):
+def get_mood_suggestions(slug: str, settings: Settings = Depends(get_settings_dep)):
     """Get suggestions for the current mood"""
-    mood_system = get_mood_system(slug)
+    mood_system = get_mood_system(slug, base_root=settings.storage_root)
     
     return mood_system.get_mood_suggestions()
 
 
 @app.post("/sessions/{slug}/mood/narrate", tags=["Mood"], summary="Generate mood-enhanced narrative")
-async def generate_mood_narrative(slug: str, prompt: str, context: Dict = {}):
+async def generate_mood_narrative(
+    slug: str,
+    prompt: str,
+    context: Dict = {},
+    settings: Settings = Depends(get_settings_dep),
+):
     """Generate narrative enhanced with current mood"""
-    mood_system = get_mood_system(slug)
+    mood_system = get_mood_system(slug, base_root=settings.storage_root)
     
     narrative = await mood_system.generate_mood_enhanced_narrative(prompt, context)
     
@@ -1764,7 +1790,7 @@ class DiscoveryCreateRequest(BaseModel):
 @app.get("/sessions/{slug}/discoveries", tags=["Discoveries"], summary="Get all discoveries")
 def get_all_discoveries(slug: str, settings: Settings = Depends(get_settings_dep)):
     """Get all discoveries for a session"""
-    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discovery_log = get_discovery_log(slug, settings.storage_root)
     discoveries = discovery_log.get_all_discoveries()
     
     return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
@@ -1773,7 +1799,7 @@ def get_all_discoveries(slug: str, settings: Settings = Depends(get_settings_dep
 @app.get("/sessions/{slug}/discoveries/recent", tags=["Discoveries"], summary="Get recent discoveries")
 def get_recent_discoveries(slug: str, limit: int = Query(5, ge=1, le=20), settings: Settings = Depends(get_settings_dep)):
     """Get most recent discoveries"""
-    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discovery_log = get_discovery_log(slug, settings.storage_root)
     discoveries = discovery_log.get_recent_discoveries(limit)
     
     return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
@@ -1782,7 +1808,7 @@ def get_recent_discoveries(slug: str, limit: int = Query(5, ge=1, le=20), settin
 @app.get("/sessions/{slug}/discoveries/important", tags=["Discoveries"], summary="Get important discoveries")
 def get_important_discoveries(slug: str, min_importance: int = Query(3, ge=1, le=5), settings: Settings = Depends(get_settings_dep)):
     """Get important discoveries"""
-    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discovery_log = get_discovery_log(slug, settings.storage_root)
     discoveries = discovery_log.get_important_discoveries(min_importance)
     
     return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
@@ -1791,7 +1817,7 @@ def get_important_discoveries(slug: str, min_importance: int = Query(3, ge=1, le
 @app.get("/sessions/{slug}/discoveries/types/{discovery_type}", tags=["Discoveries"], summary="Get discoveries by type")
 def get_discoveries_by_type(slug: str, discovery_type: str, settings: Settings = Depends(get_settings_dep)):
     """Get discoveries filtered by type"""
-    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discovery_log = get_discovery_log(slug, settings.storage_root)
     discoveries = discovery_log.get_discoveries_by_type(discovery_type)
     
     return [DiscoveryResponse(**discovery.to_dict()) for discovery in discoveries]
@@ -1800,7 +1826,7 @@ def get_discoveries_by_type(slug: str, discovery_type: str, settings: Settings =
 @app.post("/sessions/{slug}/discoveries", tags=["Discoveries"], summary="Log a new discovery")
 def log_discovery(slug: str, request: DiscoveryCreateRequest, settings: Settings = Depends(get_settings_dep)):
     """Log a new discovery"""
-    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discovery_log = get_discovery_log(slug, settings.storage_root)
     backend = _get_backend(settings)
     state = backend.state.load_state(settings, slug)
     
@@ -1820,7 +1846,7 @@ def log_discovery(slug: str, request: DiscoveryCreateRequest, settings: Settings
 @app.get("/sessions/{slug}/discoveries/stats", tags=["Discoveries"], summary="Get discovery statistics")
 def get_discovery_stats(slug: str, settings: Settings = Depends(get_settings_dep)):
     """Get statistics about discoveries"""
-    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discovery_log = get_discovery_log(slug, settings.storage_root)
     stats = discovery_log.get_discovery_stats()
     
     return stats
@@ -1829,7 +1855,7 @@ def get_discovery_stats(slug: str, settings: Settings = Depends(get_settings_dep
 @app.post("/sessions/{slug}/discoveries/{discovery_id}/describe", tags=["Discoveries"], summary="Generate enhanced discovery description")
 async def generate_discovery_description(slug: str, discovery_id: str, settings: Settings = Depends(get_settings_dep)):
     """Generate an enhanced description for a discovery using LLM"""
-    discovery_log = get_discovery_log(slug, settings.repo_root)
+    discovery_log = get_discovery_log(slug, settings.storage_root)
     
     # Find the discovery
     discovery = None
@@ -1901,7 +1927,7 @@ def _require_save_lock(slug: str, settings: Settings, owner: Optional[str]):
 @app.get("/sessions/{slug}/auto-save/status", tags=["AutoSave"], summary="Get auto-save status")
 def get_auto_save_status(slug: str):
     """Get current auto-save status"""
-    auto_save = get_auto_save_system(slug)
+    auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     status = auto_save.get_auto_save_status()
     
     return AutoSaveStatusResponse(**status)
@@ -1910,7 +1936,7 @@ def get_auto_save_status(slug: str):
 @app.post("/sessions/{slug}/auto-save/start", tags=["AutoSave"], summary="Start auto-save")
 def start_auto_save(slug: str):
     """Start the auto-save system"""
-    auto_save = get_auto_save_system(slug)
+    auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     auto_save.start_auto_save()
     
     return {"message": "Auto-save started successfully"}
@@ -1919,7 +1945,7 @@ def start_auto_save(slug: str):
 @app.post("/sessions/{slug}/auto-save/stop", tags=["AutoSave"], summary="Stop auto-save")
 def stop_auto_save(slug: str):
     """Stop the auto-save system"""
-    auto_save = get_auto_save_system(slug)
+    auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     auto_save.stop_auto_save()
     
     return {"message": "Auto-save stopped successfully"}
@@ -1929,7 +1955,7 @@ def stop_auto_save(slug: str):
 def perform_auto_save(slug: str, lock_owner: Optional[str] = None, settings: Settings = Depends(get_settings_dep)):
     """Perform an immediate auto-save"""
     _require_save_lock(slug, settings, lock_owner)
-    auto_save = get_auto_save_system(slug)
+    auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     success = auto_save.perform_auto_save()
     
     if success:
@@ -1942,7 +1968,7 @@ def perform_auto_save(slug: str, lock_owner: Optional[str] = None, settings: Set
 def manual_save(slug: str, request: ManualSaveRequest, settings: Settings = Depends(get_settings_dep)):
     """Perform a manual save"""
     _require_save_lock(slug, settings, request.lock_owner)
-    auto_save = get_auto_save_system(slug)
+    auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     result = auto_save.manual_save(request.save_name)
     
     if result['success']:
@@ -1958,7 +1984,7 @@ def manual_save(slug: str, request: ManualSaveRequest, settings: Settings = Depe
 @app.get("/sessions/{slug}/saves", tags=["AutoSave"], summary="Get save history")
 def get_save_history(slug: str, limit: int = Query(10, ge=1, le=50)):
     """Get auto-save history"""
-    auto_save = get_auto_save_system(slug)
+    auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     saves = auto_save.get_save_history(limit)
     
     return [SaveResponse(**save) for save in saves]
@@ -1967,7 +1993,7 @@ def get_save_history(slug: str, limit: int = Query(10, ge=1, le=50)):
 @app.get("/sessions/{slug}/saves/{save_id}", tags=["AutoSave"], summary="Get save information")
 def get_save_info(slug: str, save_id: str):
     """Get information about a specific save"""
-    auto_save = get_auto_save_system(slug)
+    auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     save_info = auto_save.get_save_info(save_id)
     
     if not save_info:
@@ -1980,7 +2006,7 @@ def get_save_info(slug: str, save_id: str):
 def restore_save(slug: str, save_id: str, lock_owner: Optional[str] = None, settings: Settings = Depends(get_settings_dep)):
     """Restore a save (placeholder - actual implementation would be more complex)"""
     _require_save_lock(slug, settings, lock_owner)
-    auto_save = get_auto_save_system(slug)
+    auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     result = auto_save.restore_save(save_id)
     
     if result['success']:
@@ -2038,3 +2064,8 @@ def _build_main_app() -> FastAPI:
 
 # The app exported for ASGI servers mounts the API under /api and serves the built UI at /.
 app = _build_main_app()
+
+
+
+
+

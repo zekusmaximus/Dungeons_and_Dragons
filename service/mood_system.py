@@ -155,11 +155,11 @@ class ToneModifier:
 class MoodSystem:
     """Manages the mood and tone system for a session"""
     
-    def __init__(self, session_slug: str):
+    def __init__(self, session_slug: str, base_root: Optional[Path] = None):
         self.session_slug = session_slug
-        self.mood_file = (
-            Path(__file__).resolve().parent.parent / "sessions" / session_slug / "mood_state.json"
-        )
+        root = base_root or Path(__file__).resolve().parent.parent
+        self.session_root = root / "sessions" / session_slug
+        self.mood_file = self.session_root / "mood_state.json"
         self.current_mood = Mood.NEUTRAL
         self.mood_intensity = 1.0
         self.mood_history = []
@@ -375,6 +375,6 @@ Generate a vivid description that captures the essence of the {self.current_mood
         }
 
 
-def get_mood_system(session_slug: str) -> MoodSystem:
+def get_mood_system(session_slug: str, base_root: Optional[Path] = None) -> MoodSystem:
     """Get the mood system for a session"""
-    return MoodSystem(session_slug)
+    return MoodSystem(session_slug, base_root=base_root)

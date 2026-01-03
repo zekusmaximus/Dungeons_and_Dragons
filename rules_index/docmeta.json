@@ -1,6 +1,26 @@
 [
   {
+    "file": "data\\rules\\combat_actions.md",
+    "lines": 21
+  },
+  {
+    "file": "data\\rules\\conditions.md",
+    "lines": 46
+  },
+  {
+    "file": "data\\rules\\exhaustion.md",
+    "lines": 10
+  },
+  {
     "file": "data\\rules\\movement.md",
     "lines": 5
+  },
+  {
+    "file": "data\\rules\\rests_and_recovery.md",
+    "lines": 16
+  },
+  {
+    "file": "data\\rules\\spellcasting.md",
+    "lines": 18
   }
 ]

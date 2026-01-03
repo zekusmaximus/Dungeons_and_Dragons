@@ -361,6 +361,7 @@ async def generate_dm_narration(
     before_state: Optional[Dict],
     player_intent: str,
     diff: List[str],
+    character: Optional[Dict] = None,
     include_discovery: bool = False,
     entropy_window: Optional[List[Dict]] = None,
 ) -> Tuple[DMNarration, Optional[Dict[str, int]]]:
@@ -377,9 +378,9 @@ async def generate_dm_narration(
         "  state_patch: object (only fields from SessionState),\n"
         "  dice_expressions: array of dice strings (each consumes the next entropy entry)\n"
         "}.\n"
-        "Rules: concise, grounded in provided state; keep outputs safe. Only include roll_request when a player roll is actually needed. If roll_request exists, do not resolve outcomes yet and end the narration with 'Roll now.'.\n"
+        "Rules: concise, grounded in provided state; keep outputs safe. Only include roll_request when a player roll is actually needed or if the player explicitly asks to roll for something. If roll_request exists, do not resolve outcomes yet and end the narration with 'Roll now.'.\n"
         "Entropy: Use the provided entropy_window entries for ALL random outcomes. Each dice_expressions item consumes exactly one entropy entry in order. Use the d20 array from that entry and map to the die size: result = 1 + ((d20 - 1) % die_size). Use the first needed d20 values in order for multi-die rolls.\n"
-        "State changes: Apply outcomes in state_patch and keep it consistent with narration.\n"
+        "State changes: Apply outcomes in state_patch and keep it consistent with narration. You MUST update the character sheet (HP, inventory, level, XP, GP, spells) in the state_patch when the narrative dictates (e.g., taking damage, finding loot, resting, leveling up).\n"
         "No homebrew classes or content; use SRD-only material.\n"
         "Choice contract: Return 4-5 DISTINCT options. Avoid placeholders like 'continue' or 'do nothing'. Label options with varied intent_tag when possible.\n"
         "End narration with a direct invitation: What do you do? (unless a roll_request is present; then end with 'Roll now.').\n"
@@ -392,6 +393,7 @@ async def generate_dm_narration(
         "session": slug,
         "state": state,
         "prior_state": before_state,
+        "character": character,
         "player_intent": player_intent,
         "diff": diff,
         "entropy_window": entropy_window or [],

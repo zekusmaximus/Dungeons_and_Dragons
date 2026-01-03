@@ -13,7 +13,7 @@ from datetime import datetime
 class AutoSaveSystem:
     """Handles automatic saving of game sessions"""
     
-    def __init__(self, session_slug: str, save_interval: int = 300):
+    def __init__(self, session_slug: str, save_interval: int = 300, base_root: Optional[Path] = None):
         """Initialize the auto-save system
         
         Args:
@@ -27,10 +27,9 @@ class AutoSaveSystem:
         self.running = False
         self.save_thread = None
         
-        # Initialize save data file
-        self.save_data_file = (
-            Path(__file__).resolve().parent.parent / "sessions" / session_slug / "auto_save.json"
-        )
+        root = base_root or Path(__file__).resolve().parent.parent
+        self.session_root = root / "sessions" / session_slug
+        self.save_data_file = self.session_root / "auto_save.json"
         
         # Load existing save data
         self._load_save_data()
@@ -97,7 +96,7 @@ class AutoSaveSystem:
             save_id = f"auto-{timestamp}"
             
             # Create save directory
-            session_dir = Path(__file__).resolve().parent.parent / "sessions" / self.session_slug
+            session_dir = self.session_root
             saves_dir = session_dir / "saves"
             saves_dir.mkdir(exist_ok=True)
             
@@ -154,7 +153,7 @@ class AutoSaveSystem:
     
     def get_save_history(self, limit: int = 10) -> List[Dict]:
         """Get auto-save history"""
-        session_dir = Path(__file__).resolve().parent.parent / "sessions" / self.session_slug
+        session_dir = self.session_root
         saves_dir = session_dir / "saves"
         
         if not saves_dir.exists():
@@ -196,7 +195,7 @@ class AutoSaveSystem:
             save_id = f"{save_name}-{timestamp}"
             
             # Create save directory
-            session_dir = Path(__file__).resolve().parent.parent / "sessions" / self.session_slug
+            session_dir = self.session_root
             saves_dir = session_dir / "saves"
             saves_dir.mkdir(exist_ok=True)
             
@@ -253,7 +252,7 @@ class AutoSaveSystem:
     def restore_save(self, save_id: str) -> Dict:
         """Restore a save (placeholder - actual implementation would be more complex)"""
         try:
-            session_dir = Path(__file__).resolve().parent.parent / "sessions" / self.session_slug
+            session_dir = self.session_root
             saves_dir = session_dir / "saves"
             save_file = saves_dir / f"{save_id}.json"
             
@@ -280,7 +279,7 @@ class AutoSaveSystem:
     def get_save_info(self, save_id: str) -> Optional[Dict]:
         """Get information about a specific save"""
         try:
-            session_dir = Path(__file__).resolve().parent.parent / "sessions" / self.session_slug
+            session_dir = self.session_root
             saves_dir = session_dir / "saves"
             save_file = saves_dir / f"{save_id}.json"
             
@@ -294,6 +293,7 @@ class AutoSaveSystem:
             return None
 
 
-def get_auto_save_system(session_slug: str, save_interval: int = 300) -> AutoSaveSystem:
+def get_auto_save_system(session_slug: str, save_interval: int = 300, base_root: Optional[Path] = None) -> AutoSaveSystem:
     """Get the auto-save system for a session"""
-    return AutoSaveSystem(session_slug, save_interval)
+    return AutoSaveSystem(session_slug, save_interval, base_root=base_root)
+

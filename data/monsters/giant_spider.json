@@ -1,0 +1,22 @@
+{
+  "name": "Giant Spider",
+  "size": "Large",
+  "type": "beast",
+  "alignment": "unaligned",
+  "armor_class": 14,
+  "hit_points": 26,
+  "speed": {"walk": 30, "climb": 30},
+  "abilities": {"str": 14, "dex": 16, "con": 12, "int": 2, "wis": 11, "cha": 4},
+  "skills": {"stealth": 7},
+  "senses": ["blindsight 10 ft.", "darkvision 60 ft."],
+  "challenge": 1,
+  "traits": [
+    "Spider Climb. The spider can climb difficult surfaces, including upside down on ceilings, without needing to make an ability check.",
+    "Web Sense. While in contact with a web, the spider knows the exact location of any other creature in contact with the same web.",
+    "Web Walker. The spider ignores movement restrictions caused by webbing."
+  ],
+  "actions": [
+    "Bite. Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 7 (1d8 + 3) piercing damage, and the target must make a DC 11 Constitution saving throw, taking 9 (2d8) poison damage on a failed save, or half as much damage on a success.",
+    "Web. Ranged Weapon Attack: +5 to hit, range 30/60 ft., one creature. Hit: the target is restrained by webbing. As an action, the restrained target can make a DC 12 Strength check, freeing itself on a success. The webbing can also be attacked and destroyed (AC 10; 5 HP; vulnerability to fire; immunity to bludgeoning, poison, and psychic damage)."
+  ]
+}

@@ -7,7 +7,7 @@ import tempfile
 import shutil
 from copy import deepcopy
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 import jsonschema
@@ -270,7 +270,7 @@ def load_changelog(settings: Settings, slug: str, tail: Optional[int] = None, cu
 
 def load_quests(settings: Settings, slug: str) -> Dict:
     state = load_state(settings, slug)
-    return state.get("quests", {})
+    return state.get("quests") or {}
 
 
 def save_quest(settings: Settings, slug: str, quest_id: str, quest_data: Dict):
@@ -884,6 +884,42 @@ def _apply_state_patch(state: Dict, patch: Dict) -> Dict:
     return merged
 
 
+_CHARACTER_STATE_KEYS = {
+    "hp": "hp",
+    "max_hp": "max_hp",
+    "level": "level",
+    "xp": "experience",
+    "inventory": "inventory",
+    "spells": "spells",
+    "abilities": "abilities",
+    "ac": "ac",
+}
+
+
+def _character_updates_from_state_patch(state_after: Dict, patch: Dict) -> Dict:
+    updates: Dict[str, Any] = {}
+    for state_key, character_key in _CHARACTER_STATE_KEYS.items():
+        if state_key in patch:
+            updates[character_key] = state_after.get(state_key)
+    abilities = updates.get("abilities")
+    if isinstance(abilities, dict):
+        normalized = dict(abilities)
+        if "str_" in normalized and "str" not in normalized:
+            normalized["str"] = normalized.pop("str_")
+        if "int_" in normalized and "int" not in normalized:
+            normalized["int"] = normalized.pop("int_")
+        updates["abilities"] = normalized
+    return updates
+
+
+def _apply_character_updates(character: Dict, updates: Dict) -> Tuple[Dict, bool]:
+    if not updates:
+        return character, False
+    updated = deepcopy(character)
+    updated.update(updates)
+    return updated, True
+
+
 def summarize_state_diff(before: Dict, after: Dict) -> List[str]:
     changes: List[str] = []
     keys = set(before.keys()) | set(after.keys())
@@ -1063,6 +1099,17 @@ def commit_preview(settings: Settings, slug: str, preview_id: str, lock_owner: O
     # Persist state
     state_path = session_path / "state.json"
     state_path.write_text(json.dumps(proposed_state, indent=2), encoding="utf-8")
+
+    character_patch = preview_data.get("state_patch", {}) or {}
+    updates = _character_updates_from_state_patch(proposed_state, character_patch)
+    if updates:
+        try:
+            character = load_character(settings, slug)
+            updated_character, changed = _apply_character_updates(character, updates)
+            if changed:
+                save_character(settings, slug, updated_character, persist_to_data=True)
+        except HTTPException:
+            pass
 
     transcript_path = session_path / "transcript.md"
     changelog_path = session_path / "changelog.md"

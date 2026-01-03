@@ -152,11 +152,11 @@ class NPCRelationship:
 class NPCRelationshipService:
     """Service for managing NPC relationships"""
     
-    def __init__(self, session_slug: str):
+    def __init__(self, session_slug: str, base_root: Optional[Path] = None):
         self.session_slug = session_slug
-        self.relationships_file = (
-            Path(__file__).resolve().parent.parent / "sessions" / session_slug / "npc_relationships.json"
-        )
+        root = base_root or Path(__file__).resolve().parent.parent
+        self.session_root = root / "sessions" / session_slug
+        self.relationships_file = self.session_root / "npc_relationships.json"
         self._load_relationships()
     
     def _load_relationships(self):
@@ -283,6 +283,6 @@ Generate a brief greeting that reflects their current relationship and attitude.
             return f"{relationship.name} acknowledges you with a {attitude.lower()} demeanor."
 
 
-def get_npc_relationship_service(session_slug: str) -> NPCRelationshipService:
+def get_npc_relationship_service(session_slug: str, base_root: Optional[Path] = None) -> NPCRelationshipService:
     """Get the NPC relationship service for a session"""
-    return NPCRelationshipService(session_slug)
+    return NPCRelationshipService(session_slug, base_root=base_root)

@@ -53,9 +53,11 @@ def _resolve_db_path(settings: Settings) -> Path:
             raw = raw[5:]
         path = Path(raw)
     else:
-        path = settings.repo_root / "dm.sqlite"
+        root = settings.data_root or settings.repo_root
+        path = root / "dm.sqlite"
     if not path.is_absolute():
-        path = settings.repo_root / path
+        root = settings.data_root or settings.repo_root
+        path = root / path
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -459,7 +461,18 @@ class SQLiteStateStore(StateStore):
     def apply_state_patch(self, settings: Settings, slug: str, patch: Dict) -> SessionState:
         state = self.load_state(settings, slug)
         updated = storage._apply_state_patch(state, patch)
-        return self.save_state(settings, slug, updated)
+        persisted = self.save_state(settings, slug, updated)
+        updates = storage._character_updates_from_state_patch(persisted.model_dump(mode="json"), patch)
+        if updates:
+            try:
+                character_store = SQLiteCharacterStore(self.db)
+                character = character_store.load_character(settings, slug)
+                updated_character, changed = storage._apply_character_updates(character, updates)
+                if changed:
+                    character_store.save_character(settings, slug, updated_character, persist_to_data=True)
+            except HTTPException:
+                pass
+        return persisted
 
     def validate_data(self, data: Dict, schema_name: str, settings: Settings) -> List[str]:
         return storage.validate_data(data, schema_name, settings)
@@ -741,6 +754,18 @@ class SQLiteTurnStore(TurnStore):
 
         with self.db.conn:
             _persist_state(self.db, session_id, validated_state, update_timestamp=True)
+            updates = storage._character_updates_from_state_patch(
+                validated_state, preview_data.get("state_patch", {}) or {}
+            )
+            if updates:
+                try:
+                    character_store = SQLiteCharacterStore(self.db)
+                    character = character_store.load_character(settings, slug)
+                    updated_character, changed = storage._apply_character_updates(character, updates)
+                    if changed:
+                        character_store.save_character(settings, slug, updated_character, persist_to_data=True)
+                except HTTPException:
+                    pass
             now = _now_iso()
             if transcript_entry:
                 entry_id = _next_entry_id(self.db, session_id, "transcript")

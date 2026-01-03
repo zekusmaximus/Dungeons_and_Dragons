@@ -2,6 +2,8 @@
 
 This repository is a deterministic, file-backed solo D&D experience. A FastAPI backend reads/writes the same session files a human DM would use, and a React/Vite UI is served at `/` with the API mounted at `/api`. The contract for how the Dungeon Master operates is defined in `PROTOCOL.md`, and all randomness is pulled from `dice/entropy.ndjson` so play is reproducible.
 
+New here? Start with `QUICKSTART.md`.
+
 ## Single-process quickstart (UI + API)
 1. Install backend deps
    ```bash
@@ -32,11 +34,7 @@ Key environment variables:
 - Open `http://localhost:5173`
 
 ## Docker
-```bash
-docker build -t dm-app .
-docker run -p 8000:8000 -v dm_data:/data dm-app
-```
-Environment used in the container: `STORAGE_BACKEND=sqlite` (default), `SQLITE_PATH=/data/dm.sqlite` (default), `DM_API_KEY` (optional). `docker-compose up` will build, expose port 8000, and persist `/data` automatically.
+Docker support is archived under `archive/` and not maintained. Use dev mode or the desktop build instead.
 
 ## Troubleshooting
 - UI loads but API calls 404: verify the FastAPI service is running and reachable; confirm the UI build/proxy points at `/api` (or set `VITE_API_BASE_URL` for an alternate host).

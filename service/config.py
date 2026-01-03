@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     """Runtime configuration for the DM service."""
 
     repo_root: Path = Path(__file__).resolve().parent.parent
+    data_root: Optional[Path] = None
+    seed_root: Optional[Path] = None
     sessions_dir: str = "sessions"
     data_dir: str = "data"
     worlds_dir: str = "worlds"
@@ -30,12 +32,16 @@ class Settings(BaseSettings):
         env_prefix = "DM_SERVICE_"
 
     @property
+    def storage_root(self) -> Path:
+        return self.data_root or self.repo_root
+
+    @property
     def sessions_path(self) -> Path:
-        return self.repo_root / self.sessions_dir
+        return self.storage_root / self.sessions_dir
 
     @property
     def data_path(self) -> Path:
-        return self.repo_root / self.data_dir
+        return self.storage_root / self.data_dir
 
     @property
     def characters_path(self) -> Path:
@@ -43,11 +49,11 @@ class Settings(BaseSettings):
 
     @property
     def worlds_path(self) -> Path:
-        return self.repo_root / self.worlds_dir
+        return self.storage_root / self.worlds_dir
 
     @property
     def dice_path(self) -> Path:
-        return self.repo_root / self.dice_file
+        return self.storage_root / self.dice_file
 
     @property
     def has_llm_config(self) -> bool:
@@ -56,4 +62,7 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    from .bootstrap import ensure_data_root
+    ensure_data_root(settings)
+    return settings

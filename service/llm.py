@@ -22,7 +22,8 @@ class EffectiveLLMConfig(BaseModel):
 
 
 def _config_path(settings: Settings) -> Path:
-    return settings.repo_root / ".dm_llm_config.json"
+    root = settings.data_root or settings.repo_root
+    return root / ".dm_llm_config.json"
 
 
 def _load_contract(settings: Settings) -> str:

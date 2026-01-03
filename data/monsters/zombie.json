@@ -1,0 +1,17 @@
+{
+  "name": "Zombie",
+  "size": "Medium",
+  "type": "undead",
+  "alignment": "neutral evil",
+  "armor_class": 8,
+  "hit_points": 22,
+  "speed": {"walk": 20},
+  "abilities": {"str": 13, "dex": 6, "con": 16, "int": 3, "wis": 6, "cha": 5},
+  "challenge": 0.25,
+  "traits": [
+    "Undead Fortitude. If damage reduces the zombie to 0 hit points, it makes a Con save (DC 5 + damage taken). On a success, it drops to 1 hit point instead."
+  ],
+  "actions": [
+    "Slam. Melee Weapon Attack: +3 to hit, reach 5 ft., one target. Hit: 4 (1d6 + 1) bludgeoning damage."
+  ]
+}

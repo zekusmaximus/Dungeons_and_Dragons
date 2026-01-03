@@ -1,0 +1,20 @@
+{
+  "name": "Kobold",
+  "size": "Small",
+  "type": "humanoid",
+  "alignment": "lawful evil",
+  "armor_class": 12,
+  "hit_points": 5,
+  "speed": {"walk": 30},
+  "abilities": {"str": 7, "dex": 15, "con": 9, "int": 8, "wis": 7, "cha": 8},
+  "senses": ["darkvision 60 ft."],
+  "challenge": 0.125,
+  "traits": [
+    "Sunlight Sensitivity. While in sunlight, the kobold has disadvantage on attack rolls, as well as on Wisdom (Perception) checks that rely on sight.",
+    "Pack Tactics. The kobold has advantage on an attack roll against a creature if at least one of the kobold's allies is within 5 ft. of the creature and the ally is not incapacitated."
+  ],
+  "actions": [
+    "Dagger. Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 4 (1d4 + 2) piercing damage.",
+    "Sling. Ranged Weapon Attack: +4 to hit, range 30/120 ft., one target. Hit: 4 (1d4 + 2) bludgeoning damage."
+  ]
+}

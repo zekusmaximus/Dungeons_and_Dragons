@@ -49,7 +49,17 @@ class FileStateStore(StateStore):
     def apply_state_patch(self, settings: Settings, slug: str, patch: Dict) -> SessionState:
         state = storage.load_state(settings, slug)
         updated = storage._apply_state_patch(state, patch)
-        return storage.save_state(settings, slug, updated)
+        persisted = storage.save_state(settings, slug, updated)
+        updates = storage._character_updates_from_state_patch(persisted.model_dump(mode="json"), patch)
+        if updates:
+            try:
+                character = storage.load_character(settings, slug)
+                updated_character, changed = storage._apply_character_updates(character, updates)
+                if changed:
+                    storage.save_character(settings, slug, updated_character, persist_to_data=True)
+            except HTTPException:
+                pass
+        return persisted
 
     def validate_data(self, data: Dict, schema_name: str, settings: Settings) -> List[str]:
         return storage.validate_data(data, schema_name, settings)
