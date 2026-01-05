@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
+import asyncio
 from http import HTTPStatus
 import json
 import os
@@ -9,7 +10,7 @@ from pathlib import Path
 import uuid
 
 from fastapi import Depends, FastAPI, Query, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -1982,7 +1983,7 @@ def manual_save(slug: str, request: ManualSaveRequest, settings: Settings = Depe
 
 
 @app.get("/sessions/{slug}/saves", tags=["AutoSave"], summary="Get save history")
-def get_save_history(slug: str, limit: int = Query(10, ge=1, le=50)):
+def get_save_history(slug: str, limit: int = Query(10, ge=1, le=50), settings: Settings = Depends(get_settings_dep)):
     """Get auto-save history"""
     auto_save = get_auto_save_system(slug, base_root=settings.storage_root)
     saves = auto_save.get_save_history(limit)
@@ -2018,13 +2019,100 @@ def restore_save(slug: str, save_id: str, lock_owner: Optional[str] = None, sett
         raise HTTPException(status_code=500, detail=f"Restore failed: {result['error']}")
 
 
+def _tail_file_lines(path: Path, cursor: int) -> Tuple[List[str], int]:
+    if not path.exists():
+        return [], cursor
+    with path.open(encoding="utf-8") as handle:
+        lines = handle.read().splitlines()
+    if cursor < -1:
+        cursor = -1
+    start = cursor + 1
+    if start >= len(lines):
+        return [], len(lines) - 1
+    return lines[start:], len(lines) - 1
+
+
+def _sse_event(event: str, payload: Dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
+
+
 @app.get("/events/{slug}", tags=["Observability"], summary="SSE endpoint for real-time session updates")
-def session_events(slug: str, settings: Settings = Depends(get_settings_dep)):
-    """SSE endpoint is currently disabled pending deterministic event stream design."""
-    raise HTTPException(
-        status_code=HTTPStatus.NOT_IMPLEMENTED,
-        detail="Server-sent events are not implemented. Use polling endpoints instead.",
-    )
+async def session_events(
+    slug: str,
+    request: Request,
+    transcript_cursor: Optional[str] = Query(None, description="Last seen transcript cursor"),
+    changelog_cursor: Optional[str] = Query(None, description="Last seen changelog cursor"),
+    settings: Settings = Depends(get_settings_dep),
+):
+    """Server-sent events that stream new transcript and changelog lines deterministically."""
+    backend = _get_backend(settings)
+
+    def _normalize_cursor(token: Optional[str]) -> Optional[str]:
+        if token in (None, "", "None"):
+            return None
+        try:
+            return str(int(token))
+        except Exception:
+            return None
+
+    transcript_cursor_token = _normalize_cursor(transcript_cursor)
+    changelog_cursor_token = _normalize_cursor(changelog_cursor)
+
+    async def event_stream():
+        nonlocal transcript_cursor_token, changelog_cursor_token
+        poll_interval = 1.0
+        idle_cycles = 0
+        max_idle_cycles = 60  # ~60s idle timeout
+
+        def _load_updates():
+            nonlocal transcript_cursor_token, changelog_cursor_token
+            updates: Dict[str, Any] = {}
+
+            transcript_entries, _next_t_cursor = backend.text_logs.load_transcript(
+                settings, slug, cursor=transcript_cursor_token
+            )
+            changelog_entries, _next_c_cursor = backend.text_logs.load_changelog(
+                settings, slug, cursor=changelog_cursor_token
+            )
+
+            if transcript_entries:
+                transcript_cursor_token = transcript_entries[-1]["id"]
+                updates["transcript"] = {
+                    "cursor": transcript_cursor_token,
+                    "lines": [entry["text"] for entry in transcript_entries],
+                }
+            if changelog_entries:
+                changelog_cursor_token = changelog_entries[-1]["id"]
+                updates["changelog"] = {
+                    "cursor": changelog_cursor_token,
+                    "lines": [entry["text"] for entry in changelog_entries],
+                }
+            return updates
+
+        initial_updates = _load_updates()
+        if initial_updates:
+            yield _sse_event("update", initial_updates)
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            updates = _load_updates()
+            if updates:
+                idle_cycles = 0
+                yield _sse_event("update", updates)
+            else:
+                idle_cycles += 1
+                yield ": keep-alive\n\n"
+
+            if idle_cycles >= max_idle_cycles:
+                break
+
+            await asyncio.sleep(poll_interval)
+
+        yield "event: done\ndata: {}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 def _build_main_app() -> FastAPI:

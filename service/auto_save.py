@@ -3,15 +3,26 @@ Auto-Save System - Handles automatic saving of game state and session data
 """
 
 import json
+import os
 import time
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AutoSaveSystem:
     """Handles automatic saving of game sessions"""
+    FILES_TO_SAVE = [
+        'state.json',
+        'transcript.md',
+        'changelog.md',
+        'turn.md',
+        'npc_memory.json',
+        'npc_relationships.json',
+        'mood_state.json',
+        'discovery_log.json',
+    ]
     
     def __init__(self, session_slug: str, save_interval: int = 300, base_root: Optional[Path] = None):
         """Initialize the auto-save system
@@ -92,8 +103,8 @@ class AutoSaveSystem:
             print(f"Performing auto-save for session: {self.session_slug}")
             
             # Get current timestamp
-            timestamp = datetime.utcnow().isoformat()
-            save_id = f"auto-{timestamp}"
+            timestamp = datetime.now(timezone.utc).isoformat()
+            save_id = self._format_save_id("auto", timestamp)
             
             # Create save directory
             session_dir = self.session_root
@@ -104,39 +115,8 @@ class AutoSaveSystem:
             save_file = saves_dir / f"{save_id}.json"
             
             # Collect data to save
-            save_data = {
-                'save_id': save_id,
-                'session_slug': self.session_slug,
-                'timestamp': timestamp,
-                'save_type': 'auto',
-                'data': {}
-            }
-            
-            # Save relevant files (in a real implementation, you would copy actual files)
-            # For now, we'll just save metadata about what would be saved
-            files_to_save = [
-                'state.json',
-                'transcript.md',
-                'changelog.md',
-                'turn.md',
-                'npc_memory.json',
-                'npc_relationships.json',
-                'mood_state.json',
-                'discovery_log.json'
-            ]
-            
-            saved_files = []
-            for filename in files_to_save:
-                file_path = session_dir / filename
-                if file_path.exists():
-                    # In a real implementation, you would copy the file
-                    # For this demo, we'll just record that it would be saved
-                    saved_files.append(filename)
-            
-            save_data['data']['saved_files'] = saved_files
-            
-            # Save the metadata
-            with save_file.open('w') as f:
+            save_data = self._capture_session(save_id, timestamp, save_type='auto')
+            with save_file.open('w', encoding='utf-8') as f:
                 json.dump(save_data, f, indent=2)
             
             # Update save metadata
@@ -186,13 +166,43 @@ class AutoSaveSystem:
             'save_count': self.save_count,
             'next_save_in': max(0, self.save_interval - (time.time() - self.last_save_time))
         }
+
+    def _capture_session(self, save_id: str, timestamp: str, save_type: str, save_name: Optional[str] = None) -> Dict:
+        """Capture the current session files into a structured payload."""
+        session_dir = self.session_root
+        files_payload: Dict[str, Dict[str, object]] = {}
+
+        for filename in self.FILES_TO_SAVE:
+            file_path = session_dir / filename
+            if not file_path.exists():
+                continue
+            try:
+                content = file_path.read_text(encoding='utf-8')
+            except Exception:
+                # Fallback to binary-safe read if text decode fails
+                content = file_path.read_bytes().decode('utf-8', errors='replace')
+            files_payload[filename] = {
+                'content': content,
+                'mtime': file_path.stat().st_mtime,
+            }
+
+        return {
+            'save_id': save_id,
+            'session_slug': self.session_slug,
+            'timestamp': timestamp,
+            'save_type': save_type,
+            'save_name': save_name,
+            'data': {
+                'files': files_payload,
+            },
+        }
     
     def manual_save(self, save_name: str = "manual") -> Dict:
         """Perform a manual save"""
         try:
             # Get current timestamp
-            timestamp = datetime.utcnow().isoformat()
-            save_id = f"{save_name}-{timestamp}"
+            timestamp = datetime.now(timezone.utc).isoformat()
+            save_id = self._format_save_id(save_name, timestamp)
             
             # Create save directory
             session_dir = self.session_root
@@ -202,45 +212,15 @@ class AutoSaveSystem:
             # Create save file
             save_file = saves_dir / f"{save_id}.json"
             
-            # Collect data to save
-            save_data = {
-                'save_id': save_id,
-                'session_slug': self.session_slug,
-                'timestamp': timestamp,
-                'save_type': 'manual',
-                'save_name': save_name,
-                'data': {}
-            }
-            
-            # Save relevant files (metadata only in this implementation)
-            files_to_save = [
-                'state.json',
-                'transcript.md',
-                'changelog.md',
-                'turn.md',
-                'npc_memory.json',
-                'npc_relationships.json',
-                'mood_state.json',
-                'discovery_log.json'
-            ]
-            
-            saved_files = []
-            for filename in files_to_save:
-                file_path = session_dir / filename
-                if file_path.exists():
-                    saved_files.append(filename)
-            
-            save_data['data']['saved_files'] = saved_files
-            
-            # Save the metadata
-            with save_file.open('w') as f:
+            save_data = self._capture_session(save_id, timestamp, save_type='manual', save_name=save_name)
+            with save_file.open('w', encoding='utf-8') as f:
                 json.dump(save_data, f, indent=2)
             
             return {
                 'success': True,
                 'save_id': save_id,
                 'timestamp': timestamp,
-                'saved_files': saved_files
+                'saved_files': list(save_data['data']['files'].keys()),
             }
             
         except Exception as e:
@@ -248,9 +228,14 @@ class AutoSaveSystem:
                 'success': False,
                 'error': str(e)
             }
-    
+
+    def _format_save_id(self, prefix: str, timestamp: str) -> str:
+        """Sanitize timestamp for filesystem-safe save identifiers."""
+        safe_timestamp = timestamp.replace(":", "-")
+        return f"{prefix}-{safe_timestamp}"
+
     def restore_save(self, save_id: str) -> Dict:
-        """Restore a save (placeholder - actual implementation would be more complex)"""
+        """Restore a save by writing captured files back to the session directory."""
         try:
             session_dir = self.session_root
             saves_dir = session_dir / "saves"
@@ -259,15 +244,27 @@ class AutoSaveSystem:
             if not save_file.exists():
                 return {'success': False, 'error': 'Save not found'}
             
-            with save_file.open() as f:
+            with save_file.open(encoding='utf-8') as f:
                 save_data = json.load(f)
             
-            # In a real implementation, you would restore the actual files
-            # For this demo, we'll just return the save data
+            files_payload = save_data.get('data', {}).get('files', {})
+            for filename, payload in files_payload.items():
+                dest = session_dir / filename
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                content = payload.get('content', '')
+                dest.write_text(content, encoding='utf-8')
+                mtime = payload.get('mtime')
+                if mtime:
+                    try:
+                        dest.touch()
+                        os.utime(dest, (mtime, mtime))
+                    except Exception:
+                        pass
+
             return {
                 'success': True,
                 'save_data': save_data,
-                'message': 'Save restoration would be implemented here'
+                'message': 'Session files restored from save point'
             }
             
         except Exception as e:

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "Fire Bolt",
+    "level": 0,
+    "school": "Evocation",
+    "range": "120 feet",
+    "casting_time": "1 action",
+    "duration": "Instantaneous",
+    "components": ["V", "S"],
+    "description": "Make a ranged spell attack. On a hit, target takes 1d10 fire damage. Scales with level (5th: 2d10, 11th: 3d10, 17th: 4d10)."
+  },
+  {
+    "name": "Guidance",
+    "level": 0,
+    "school": "Divination",
+    "range": "Touch",
+    "casting_time": "1 action",
+    "duration": "Concentration, up to 1 minute",
+    "components": ["V", "S"],
+    "description": "Touch a willing creature. Once before the spell ends, the target can roll a d4 and add the number rolled to one ability check of its choice."
+  },
+  {
+    "name": "Mage Armor",
+    "level": 1,
+    "school": "Abjuration",
+    "range": "Touch",
+    "casting_time": "1 action",
+    "duration": "8 hours",
+    "components": ["V", "S", "M"],
+    "description": "A willing creature without armor gains AC 13 + Dex modifier for the duration. The spell ends if the target dons armor."
+  },
+  {
+    "name": "Magic Missile",
+    "level": 1,
+    "school": "Evocation",
+    "range": "120 feet",
+    "casting_time": "1 action",
+    "duration": "Instantaneous",
+    "components": ["V", "S"],
+    "description": "Create three glowing darts of force. Each hits a creature of your choice for 1d4+1 force damage. Higher levels: one additional dart per slot level above 1st."
+  },
+  {
+    "name": "Cure Wounds",
+    "level": 1,
+    "school": "Evocation",
+    "range": "Touch",
+    "casting_time": "1 action",
+    "duration": "Instantaneous",
+    "components": ["V", "S"],
+    "description": "A creature you touch regains hit points equal to 1d8 + your spellcasting ability modifier. Higher levels: +1d8 per slot above 1st."
+  },
+  {
+    "name": "Shield",
+    "level": 1,
+    "school": "Abjuration",
+    "range": "Self",
+    "casting_time": "1 reaction",
+    "duration": "1 round",
+    "components": ["V", "S"],
+    "description": "When you are hit by an attack or targeted by Magic Missile, gain +5 AC until start of next turn and take no damage from Magic Missile."
+  }
+]

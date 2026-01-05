@@ -30,6 +30,7 @@
     "level": {"type": "integer", "minimum": 1},
     "hp": {"type": "integer", "minimum": 0},
     "ac": {"type": "integer", "minimum": 1},
+    "max_hp": {"type": "integer", "minimum": 1},
     "abilities": {
       "type": "object",
       "required": ["str", "dex", "con", "int", "wis", "cha"],
@@ -74,6 +75,21 @@
       "type": "array",
       "items": {"type": "string"}
     },
+    "spell_slots": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "spells": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "conditions": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "experience": {"type": "integer", "minimum": 0},
+    "gp": {"type": "integer", "minimum": 0},
+    "method": {"type": "string"},
     "features": {
       "type": "array",
       "items": {"type": "string"}

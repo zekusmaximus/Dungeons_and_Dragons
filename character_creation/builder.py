@@ -194,6 +194,7 @@ def write_creation_files(
         "background": background_name,
         "level": 1,
         "hp": class_data.get("hit_die", 6) + ability_modifier(abilities.get("con", 10)),
+        "max_hp": class_data.get("hit_die", 6) + ability_modifier(abilities.get("con", 10)),
         "ac": 10 + max(ability_modifier(abilities.get("dex", 10)), 0),
         "abilities": abilities,
         "skills": skills,

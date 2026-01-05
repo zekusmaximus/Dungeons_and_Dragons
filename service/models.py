@@ -32,6 +32,7 @@ class Character(BaseModel):
     level: int = Field(ge=1)
     hp: int = Field(ge=0)
     ac: int = Field(ge=1)
+    max_hp: Optional[int] = Field(default=None, ge=1)
     abilities: Abilities
     skills: Dict[str, int]
     inventory: List[str]
@@ -39,6 +40,12 @@ class Character(BaseModel):
     features: List[str]
     proficiencies: Proficiencies
     notes: str
+    spell_slots: Optional[Dict[str, int]] = None
+    spells: Optional[List[str]] = None
+    experience: Optional[int] = Field(default=None, ge=0)
+    gp: Optional[int] = Field(default=None, ge=0)
+    conditions: Optional[List[str]] = None
+    method: Optional[str] = None
     creation_source: str  # "dm" or "tool"
 
     model_config = ConfigDict(populate_by_name=True)
@@ -73,6 +80,7 @@ class SessionState(BaseModel):
     ac: Optional[int] = Field(default=None, ge=1)
     max_hp: Optional[int] = Field(default=None, ge=1)
     spells: Optional[List[str]] = None
+    spell_slots: Optional[Dict[str, int]] = None
     abilities: Optional[Abilities] = None
     adventure_hook: Optional[Dict[str, str]] = None
 

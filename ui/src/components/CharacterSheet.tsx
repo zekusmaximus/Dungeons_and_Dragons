@@ -89,7 +89,19 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
     </div>
   );
 
-  const abilities = state?.abilities ?? character.abilities ?? {};
+  const defaultAbilities: AbilityScores = {
+    str: 10,
+    dex: 10,
+    con: 10,
+    int: 10,
+    wis: 10,
+    cha: 10,
+  };
+  const abilities: AbilityScores = {
+    ...defaultAbilities,
+    ...(character.abilities ?? {}),
+    ...(state?.abilities ?? {}),
+  };
   const inventory = state?.inventory ?? character.inventory ?? [];
   const spells = state?.spells ?? character.spells ?? [];
   const experience = state?.xp ?? character.experience ?? 0;
@@ -159,7 +171,7 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ sessionSlug, onClose })
         <div className="ability-scores">
           <h3>Ability Scores</h3>
           <div className="abilities-grid">
-            {Object.entries(abilities).map(([ability, score]) => (
+            {Object.entries(abilities as Record<string, number>).map(([ability, score]) => (
               <div key={ability} className="ability-box">
                 <div className="ability-name">{ability.toUpperCase()}</div>
                 <div className="ability-score">{score}</div>

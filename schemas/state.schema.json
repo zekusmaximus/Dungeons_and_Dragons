@@ -57,6 +57,15 @@
       "additionalProperties": {"type": "object"}
     },
     "gp": {"type": "integer", "minimum": 0},
+    "spells": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "spell_slots": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "max_hp": {"type": "integer", "minimum": 1},
     "adventure_hook": {
       "type": "object",
       "properties": {

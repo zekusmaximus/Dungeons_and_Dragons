@@ -891,6 +891,8 @@ _CHARACTER_STATE_KEYS = {
     "xp": "experience",
     "inventory": "inventory",
     "spells": "spells",
+    "spell_slots": "spell_slots",
+    "conditions": "conditions",
     "abilities": "abilities",
     "ac": "ac",
 }
