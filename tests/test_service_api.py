@@ -42,3 +42,39 @@ def test_events_stream_initial_update(client, session_slug):
                 break
         assert data_line is not None
         assert data_line.startswith("data:")
+
+
+def test_rest_endpoints_reset_hp_and_slots(client, session_slug):
+    # claim lock
+    lock_resp = client.post(f"/api/sessions/{session_slug}/lock/claim", json={"owner": "tester", "ttl": 300})
+    assert lock_resp.status_code == 200
+
+    # set low hp and empty slots via preview/commit
+    preview = client.post(
+        f"/api/sessions/{session_slug}/turn/preview",
+        json={
+            "response": "testing rest",
+            "state_patch": {"hp": 1, "max_hp": 10, "spell_slots": {"1": 0}},
+            "transcript_entry": "setup",
+            "dice_expressions": [],
+            "lock_owner": "tester",
+        },
+    )
+    assert preview.status_code == 200
+    preview_id = preview.json()["id"]
+    commit = client.post(f"/api/sessions/{session_slug}/turn/commit", json={"preview_id": preview_id, "lock_owner": "tester"})
+    assert commit.status_code == 200
+
+    rest_resp = client.post(f"/api/sessions/{session_slug}/rest/long", json={"lock_owner": "tester"})
+    assert rest_resp.status_code == 200
+    state = rest_resp.json()["state"]
+    assert state["hp"] == 10
+    assert state["spell_slots"]["1"] >= 2
+
+
+def test_spells_endpoint_filters(client):
+    resp = client.get("/api/spells", params={"name": "fire"})
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert "spells" in payload
+    assert any("fire" in spell["name"].lower() for spell in payload["spells"])

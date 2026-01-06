@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import LiveUpdates from '../components/LiveUpdates';
 
 interface AbilityBlock {
   str?: number;
@@ -59,7 +60,7 @@ interface PlayerTableProps {
   onAdvanced: () => void;
 }
 
-type ChatMessage = { role: 'dm' | 'player' | 'roll'; text: string; recap?: string; stakes?: string };
+type ChatMessage = { role: 'dm' | 'player' | 'roll' | 'log'; text: string; recap?: string; stakes?: string };
 
 type RollType = 'ability_check' | 'saving_throw' | 'attack' | 'damage' | 'initiative';
 type AdvantageType = 'advantage' | 'disadvantage' | 'normal' | undefined;
@@ -102,12 +103,20 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
   const [retryAction, setRetryAction] = useState<string | null>(null);
   const [isCharacterOpen, setIsCharacterOpen] = useState(true);
   const [isJournalOpen, setIsJournalOpen] = useState(true);
+  const [liveLines, setLiveLines] = useState<string[]>([]);
+  const [liveChangelog, setLiveChangelog] = useState<string[]>([]);
+  const [liveRolls, setLiveRolls] = useState<{ turn: number; items: any[] } | null>(null);
+  const transcriptSeenRef = useRef<string[]>([]);
 
   useEffect(() => {
     setChat([]);
     setInput('');
     setRollRequest(null);
     setRollResult(null);
+    setLiveLines([]);
+    setLiveChangelog([]);
+    setLiveRolls(null);
+    transcriptSeenRef.current = [];
   }, [sessionSlug]);
 
   useEffect(() => {
@@ -136,6 +145,30 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
     const latestRoll = bundle.recaps?.[0]?.dm?.roll_request;
     setRollRequest(latestRoll || null);
   }, [bundle, sessionSlug]);
+
+  useEffect(() => {
+    if (!liveLines.length) return;
+    const newLines = liveLines.filter((line) => !transcriptSeenRef.current.includes(line));
+    if (!newLines.length) return;
+    transcriptSeenRef.current.push(...newLines);
+    setChat((prev) => [...prev, ...newLines.map((text) => ({ role: 'dm' as const, text }))]);
+  }, [liveLines]);
+
+  useEffect(() => {
+    if (!liveChangelog.length) return;
+    setChat((prev) => [...prev, ...liveChangelog.map((text) => ({ role: 'log' as const, text }))]);
+  }, [liveChangelog]);
+
+  useEffect(() => {
+    if (!liveRolls || !liveRolls.items?.length) return;
+    setChat((prev) => [
+      ...prev,
+      ...liveRolls.items.map((roll) => ({
+        role: 'roll' as const,
+        text: formatRollSummary(roll.total, roll.breakdown || roll.text || ''),
+      })),
+    ]);
+  }, [liveRolls]);
 
   useEffect(() => {
     if (!rollRequest) {
@@ -394,6 +427,12 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
 
   return (
     <div className="player-table">
+      <LiveUpdates
+        sessionSlug={sessionSlug}
+        onTranscriptUpdate={setLiveLines}
+        onChangelogUpdate={setLiveChangelog}
+        onRollUpdate={setLiveRolls}
+      />
       <style>{tableCSS}</style>
       <header className="session-header">
         <div className="session-core">
@@ -425,7 +464,9 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ sessionSlug, onBack, onAdvanc
             {chat.length === 0 && <div className="panel">No turns yet. Tell the DM what you do.</div>}
             {chat.map((msg, idx) => (
               <div key={idx} className={`chat-line ${msg.role}`}>
-                <div className="chat-label">{msg.role === 'dm' ? 'DM' : msg.role === 'roll' ? 'Roll' : 'You'}</div>
+                <div className="chat-label">
+                  {msg.role === 'dm' ? 'DM' : msg.role === 'roll' ? 'Roll' : msg.role === 'log' ? 'Log' : 'You'}
+                </div>
                 <div className="chat-text">{msg.text}</div>
                 {msg.recap && <div className="chat-recap">{msg.recap}</div>}
                 {msg.stakes && <div className="chat-stakes">Stakes: {msg.stakes}</div>}

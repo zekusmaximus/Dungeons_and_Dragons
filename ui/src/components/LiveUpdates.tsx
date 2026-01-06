@@ -3,35 +3,45 @@ import { createApiEventSource } from '../apiBase';
 
 interface LiveUpdatesProps {
   sessionSlug: string;
-  onTranscriptUpdate: (tail: string[]) => void;
-  onLockUpdate: (owner: string | null) => void;
+  onTranscriptUpdate: (lines: string[]) => void;
+  onChangelogUpdate?: (lines: string[]) => void;
+  onRollUpdate?: (rolls: { turn: number; items: any[] }) => void;
 }
 
-const LiveUpdates: React.FC<LiveUpdatesProps> = ({ sessionSlug, onTranscriptUpdate, onLockUpdate }) => {
+const LiveUpdates: React.FC<LiveUpdatesProps> = ({ sessionSlug, onTranscriptUpdate, onChangelogUpdate, onRollUpdate }) => {
   useEffect(() => {
     const eventSource = createApiEventSource(`/api/events/${sessionSlug}`);
 
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'transcript_update') {
-        onTranscriptUpdate(data.data.tail);
-      } else if (data.type === 'lock_claimed') {
-        onLockUpdate(data.data.owner);
-      } else if (data.type === 'lock_released') {
-        onLockUpdate(null);
+    const handleUpdate = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data || '{}');
+        if (payload.transcript?.lines?.length) {
+          onTranscriptUpdate(payload.transcript.lines);
+        }
+        if (payload.changelog?.lines?.length && onChangelogUpdate) {
+          onChangelogUpdate(payload.changelog.lines);
+        }
+        if (payload.rolls && payload.rolls.items && onRollUpdate) {
+          onRollUpdate(payload.rolls);
+        }
+      } catch (err) {
+        console.error('Failed to parse SSE payload', err);
       }
     };
+
+    eventSource.addEventListener('update', handleUpdate);
 
     eventSource.onerror = (error) => {
       console.error('SSE error:', error);
     };
 
     return () => {
+      eventSource.removeEventListener('update', handleUpdate);
       eventSource.close();
     };
-  }, [sessionSlug, onTranscriptUpdate, onLockUpdate]);
+  }, [sessionSlug, onTranscriptUpdate]);
 
-  return null; // This component doesn't render anything
+  return null; // No UI
 };
 
 export default LiveUpdates;

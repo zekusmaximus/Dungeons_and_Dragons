@@ -19,6 +19,7 @@ from .config import Settings, get_settings
 from .llm import call_llm_api, get_effective_llm_config, persist_llm_config
 from .storage_backends.factory import get_storage_backend
 from .storage_backends.interfaces import StorageBackend
+from . import spells as spells_lib
 from .models import (
     SessionSummary, PaginatedResponse,
     LockClaim, LockInfo, TurnResponse, PreviewRequest, PreviewResponse,
@@ -73,6 +74,20 @@ class LLMConfigResponse(BaseModel):
     temperature: float
     max_tokens: int
     source: str
+
+
+class RestRequest(BaseModel):
+    lock_owner: Optional[str] = None
+    caster_type: Optional[str] = "full"
+    reset_spell_slots: Optional[bool] = None
+    clear_conditions: Optional[bool] = None
+    recover_hp: Optional[bool] = None
+    target_hp: Optional[int] = None
+
+
+class SpellsQuery(BaseModel):
+    level: Optional[int] = None
+    name: Optional[str] = None
 
 
 class NewSessionRequest(BaseModel):
@@ -136,6 +151,18 @@ def get_schema(schema_name: str, settings: Settings = Depends(get_settings_dep))
         raise HTTPException(status_code=404, detail="Schema not found")
     with schema_path.open() as f:
         return json.load(f)
+
+
+@app.get("/spells", tags=["Rules"], summary="List SRD spells")
+def list_spells(level: Optional[int] = Query(None), name: Optional[str] = Query(None), settings: Settings = Depends(get_settings_dep)):
+    spells_path = settings.repo_root / "data" / "spells" / "spells.json"
+    entries = spells_lib.load_spells(spells_path)
+    if level is not None:
+        entries = [s for s in entries if s.get("level") == level]
+    if name:
+        needle = name.lower()
+        entries = [s for s in entries if needle in s.get("name", "").lower()]
+    return {"spells": entries, "count": len(entries)}
 
 
 @app.get("/sessions")
@@ -1925,6 +1952,68 @@ def _require_save_lock(slug: str, settings: Settings, owner: Optional[str]):
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail="Lock owned by another actor")
 
 
+def _append_text(path: Path, line: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(line.rstrip() + "\n")
+
+
+def _apply_rest(settings: Settings, slug: str, rest_type: str, payload: RestRequest) -> SessionState:
+    backend = _get_backend(settings)
+    state = backend.state.load_state(settings, slug)
+    level = state.get("level", 1)
+    max_hp = state.get("max_hp") or state.get("hp")
+    session_path = settings.sessions_path / slug
+    transcript_path = session_path / "transcript.md"
+    changelog_path = session_path / "changelog.md"
+    before_hp = state.get("hp")
+    before_slots = state.get("spell_slots") or {}
+    class_name = ""
+    try:
+        character = backend.character.load_character(settings, slug)
+        class_name = str(character.get("class", "")).lower()
+    except Exception:
+        pass
+
+    patch: Dict[str, Any] = {}
+    if rest_type == "long":
+        if payload.recover_hp is not False and max_hp is not None:
+            patch["hp"] = max_hp
+        if payload.clear_conditions is not False:
+            patch["conditions"] = []
+        reset_slots = True if payload.reset_spell_slots is None else payload.reset_spell_slots
+        if reset_slots:
+            patch["spell_slots"] = spells_lib.reset_spell_slots(level, caster_type=payload.caster_type or "full")
+    else:  # short rest
+        if payload.target_hp is not None:
+            if max_hp is not None:
+                patch["hp"] = min(payload.target_hp, max_hp)
+            else:
+                patch["hp"] = payload.target_hp
+        if payload.clear_conditions:
+            patch["conditions"] = []
+        if payload.reset_spell_slots or "warlock" in class_name:
+            patch["spell_slots"] = spells_lib.reset_spell_slots(level, caster_type=payload.caster_type or "full")
+
+    if not patch:
+        return state
+
+    updated = backend.state.apply_state_patch(settings, slug, patch)
+    updated_dict = updated.model_dump()
+
+    hp_after = updated_dict.get("hp")
+    slots_after = updated_dict.get("spell_slots") or {}
+    hp_note = f"HP {before_hp}->{hp_after}" if before_hp is not None and hp_after is not None else "HP updated"
+    slots_note = ""
+    if slots_after and slots_after != before_slots:
+        slots_note = f" slots:{slots_after}"
+    summary = f"{rest_type.title()} rest completed. {hp_note}{slots_note}".strip()
+    _append_text(transcript_path, summary)
+    _append_text(changelog_path, summary)
+
+    return updated
+
+
 @app.get("/sessions/{slug}/auto-save/status", tags=["AutoSave"], summary="Get auto-save status")
 def get_auto_save_status(slug: str):
     """Get current auto-save status"""
@@ -1932,6 +2021,20 @@ def get_auto_save_status(slug: str):
     status = auto_save.get_auto_save_status()
     
     return AutoSaveStatusResponse(**status)
+
+
+@app.post("/sessions/{slug}/rest/short", tags=["Rest"], summary="Apply a short rest")
+def short_rest(slug: str, request: RestRequest, settings: Settings = Depends(get_settings_dep)):
+    _require_save_lock(slug, settings, request.lock_owner)
+    new_state = _apply_rest(settings, slug, "short", request)
+    return {"state": new_state}
+
+
+@app.post("/sessions/{slug}/rest/long", tags=["Rest"], summary="Apply a long rest")
+def long_rest(slug: str, request: RestRequest, settings: Settings = Depends(get_settings_dep)):
+    _require_save_lock(slug, settings, request.lock_owner)
+    new_state = _apply_rest(settings, slug, "long", request)
+    return {"state": new_state}
 
 
 @app.post("/sessions/{slug}/auto-save/start", tags=["AutoSave"], summary="Start auto-save")
@@ -2046,6 +2149,7 @@ async def session_events(
 ):
     """Server-sent events that stream new transcript and changelog lines deterministically."""
     backend = _get_backend(settings)
+    turns_path = settings.sessions_path / slug / "turns"
 
     def _normalize_cursor(token: Optional[str]) -> Optional[str]:
         if token in (None, "", "None"):
@@ -2057,15 +2161,16 @@ async def session_events(
 
     transcript_cursor_token = _normalize_cursor(transcript_cursor)
     changelog_cursor_token = _normalize_cursor(changelog_cursor)
+    last_roll_turn: Optional[int] = None
 
     async def event_stream():
-        nonlocal transcript_cursor_token, changelog_cursor_token
+        nonlocal transcript_cursor_token, changelog_cursor_token, last_roll_turn
         poll_interval = 1.0
         idle_cycles = 0
         max_idle_cycles = 60  # ~60s idle timeout
 
         def _load_updates():
-            nonlocal transcript_cursor_token, changelog_cursor_token
+            nonlocal transcript_cursor_token, changelog_cursor_token, last_roll_turn
             updates: Dict[str, Any] = {}
 
             transcript_entries, _next_t_cursor = backend.text_logs.load_transcript(
@@ -2087,6 +2192,24 @@ async def session_events(
                     "cursor": changelog_cursor_token,
                     "lines": [entry["text"] for entry in changelog_entries],
                 }
+
+            if turns_path.exists():
+                try:
+                    turn_files = sorted(
+                        [p for p in turns_path.glob("*.json") if p.stem.isdigit()],
+                        key=lambda p: int(p.stem),
+                    )
+                    if turn_files:
+                        latest = turn_files[-1]
+                        turn_no = int(latest.stem)
+                        if last_roll_turn is None or turn_no > last_roll_turn:
+                            data = json.loads(latest.read_text(encoding="utf-8"))
+                            rolls = data.get("rolls") or []
+                            if rolls:
+                                updates["rolls"] = {"turn": turn_no, "items": rolls}
+                            last_roll_turn = turn_no
+                except Exception:
+                    pass
             return updates
 
         initial_updates = _load_updates()

@@ -12,7 +12,6 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ sessionSlug }) => {
-  const [liveLockOwner, setLiveLockOwner] = useState<string | null>(null);
   const [liveTranscriptTail, setLiveTranscriptTail] = useState<string[]>([]);
 
   const { data: turnData } = useQuery({
@@ -20,7 +19,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sessionSlug }) => {
     queryFn: () => fetch(`/api/sessions/${sessionSlug}/turn`).then(r => r.json()),
   });
 
-  const lockOwner = liveLockOwner || turnData?.lock_status?.owner;
+  const lockOwner = turnData?.lock_status?.owner;
   const isLockedByOther = lockOwner && lockOwner !== 'user1';
 
   return (
@@ -31,11 +30,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sessionSlug }) => {
           Session is locked by {lockOwner}. Actions are disabled.
         </div>
       )}
-      <LiveUpdates
-        sessionSlug={sessionSlug}
-        onTranscriptUpdate={setLiveTranscriptTail}
-        onLockUpdate={setLiveLockOwner}
-      />
+      <LiveUpdates sessionSlug={sessionSlug} onTranscriptUpdate={setLiveTranscriptTail} />
       <TurnConsole sessionSlug={sessionSlug} />
       <JobsDrawer sessionSlug={sessionSlug} />
       <StatePanel sessionSlug={sessionSlug} />
